@@ -55,6 +55,10 @@ export async function handleCheckoutSessionCompleted(
 
   await ensureFreeSubscription(userId);
 
+  await getStripe().customers.update(stripeCustomerId, {
+    metadata: { userId },
+  });
+
   const stripeSubscription =
     await getStripe().subscriptions.retrieve(stripeSubscriptionId);
 

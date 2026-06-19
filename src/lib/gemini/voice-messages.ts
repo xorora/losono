@@ -117,6 +117,45 @@ export function buildGeminiSetupMessage(input: {
   };
 }
 
+/** Handshake for ephemeral-token sessions (config is locked in the token). */
+export function buildGeminiEphemeralSetupMessage() {
+  return { setup: {} };
+}
+
+type GeminiErrorMessage = {
+  error?: {
+    message?: string;
+    status?: string;
+    code?: number;
+  };
+};
+
+export function extractGeminiErrorMessage(message: unknown): string | null {
+  const error = (message as GeminiErrorMessage).error;
+  if (!error) {
+    return null;
+  }
+
+  return error.message ?? error.status ?? "Voice session error";
+}
+
+/** Gemini Live WebSocket frames may arrive as string, Blob, or ArrayBuffer in browsers. */
+export async function parseWebSocketJsonMessage(
+  data: string | ArrayBuffer | Blob,
+): Promise<unknown | null> {
+  try {
+    const text =
+      typeof data === "string"
+        ? data
+        : data instanceof Blob
+          ? await data.text()
+          : new TextDecoder().decode(data);
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export function buildGeminiAudioInput(base64Pcm: string) {
   return {
     realtimeInput: {

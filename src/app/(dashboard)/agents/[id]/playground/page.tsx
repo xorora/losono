@@ -6,7 +6,7 @@ import { AgentChat } from "@/components/chat/agent-chat";
 import { PublishActions } from "@/components/deploy/publish-actions";
 import { Button } from "@/components/ui/button";
 import { AgentVoice } from "@/components/voice/agent-voice";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { canUseVoiceInPlayground } from "@/lib/billing/voice-access";
 import { getAgentForUser } from "@/lib/db/queries/agents";
 
@@ -40,9 +40,22 @@ async function PlaygroundContent({ params }: PlaygroundPageProps) {
     notFound();
   }
 
-  const subscription = await getSubscriptionByUserId(userId);
+  const subscription = await getSubscriptionWithStripeSync(
+    userId,
+    session?.user?.email,
+  );
   const voiceAccess = canUseVoiceInPlayground(subscription, agent);
   const canPublish = agent.userPrompt.trim().length > 0;
+  const isPro = subscription?.plan === "pro";
+  const isPublished = agent.status === "published";
+
+  const sandboxMessage = isPublished
+    ? "Playground — test changes here before updating your live agent."
+    : isPro && voiceAccess.allowed
+      ? "Sandbox mode — this agent is not live yet. Chat and voice are available for testing; publish when you're ready."
+      : isPro
+        ? "Sandbox mode — this agent is not live yet. Enable voice in Settings to test it here."
+        : "Sandbox mode — this agent is not live. Chat is available on all plans; voice requires Pro.";
 
   return (
     <div className="mx-auto flex h-[calc(100svh-3.5rem)] w-full max-w-6xl flex-col gap-6 overflow-hidden p-6 md:p-8">
@@ -69,8 +82,7 @@ async function PlaygroundContent({ params }: PlaygroundPageProps) {
       </div>
 
       <div className="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
-        Sandbox mode — this agent is not live. Chat is available on all plans;
-        voice requires Pro.
+        {sandboxMessage}
       </div>
 
       <div className="grid min-h-0 flex-1 grid-rows-2 gap-6 xl:grid-cols-2 xl:grid-rows-1">

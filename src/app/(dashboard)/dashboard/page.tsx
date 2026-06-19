@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { AgentList } from "@/components/dashboard/agent-list";
 import { CreateAgentForm } from "@/components/dashboard/create-agent-form";
 import { Button } from "@/components/ui/button";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { listAgentsForUser } from "@/lib/db/queries/agents";
 
 function DashboardFallback() {
@@ -23,7 +23,7 @@ async function DashboardContent() {
   }
 
   const [subscription, agents] = await Promise.all([
-    getSubscriptionByUserId(session.user.id),
+    getSubscriptionWithStripeSync(session.user.id, session.user.email),
     listAgentsForUser(session.user.id),
   ]);
 

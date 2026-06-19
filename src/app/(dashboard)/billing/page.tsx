@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { openPortal, startCheckout } from "@/lib/billing/actions";
 import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { syncSubscriptionFromStripe } from "@/lib/billing/sync-subscription";
 import { countAgentsForUser } from "@/lib/db/queries/agents";
 import { isStripeConfigured } from "@/lib/stripe";
 
@@ -26,12 +27,20 @@ async function BillingContent({
     return null;
   }
 
-  const [subscription, activeAgents] = await Promise.all([
-    getSubscriptionByUserId(session.user.id),
-    countAgentsForUser(session.user.id),
-  ]);
-
   const stripeReady = isStripeConfigured();
+  const activeAgents = await countAgentsForUser(session.user.id);
+
+  let subscription = await getSubscriptionByUserId(session.user.id);
+  if (stripeReady) {
+    try {
+      subscription = await syncSubscriptionFromStripe(
+        session.user.id,
+        session.user.email,
+      );
+    } catch (syncError) {
+      console.error("[billing] stripe sync failed on page load", syncError);
+    }
+  }
   const isPro = subscription?.plan === "pro";
   const agentLimit = subscription?.agentLimit ?? 1;
   const suggestedSeats = Math.max(activeAgents, 1);
@@ -48,7 +57,7 @@ async function BillingContent({
 
       {checkout === "success" && (
         <p className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-          Subscription updated. Your plan may take a moment to sync.
+          Subscription updated. Your plan has been synced from Stripe.
         </p>
       )}
 

@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Loader2, Send } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { ChatMarkdown } from "@/components/chat/chat-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -84,17 +85,23 @@ export function AgentChat({ agentId, agentName }: AgentChatProps) {
               return null;
             }
 
+            const isUser = message.role === "user";
+
             return (
               <div
                 key={message.id}
                 className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
-                  message.role === "user"
+                  "max-w-[85%] rounded-2xl px-4 py-3",
+                  isUser
                     ? "ml-auto bg-primary text-primary-foreground"
                     : "bg-muted text-foreground",
                 )}
               >
-                {text}
+                {isUser ? (
+                  <p className="text-sm whitespace-pre-wrap">{text}</p>
+                ) : (
+                  <ChatMarkdown content={text} />
+                )}
               </div>
             );
           })

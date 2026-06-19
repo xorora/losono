@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { extractBearerApiKey, verifyApiKey } from "@/lib/api-keys";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { canUseVoiceInPlayground } from "@/lib/billing/voice-access";
 import {
   getAgentForUser,
@@ -166,7 +166,7 @@ export async function resolveVoicePlaygroundAccess(
     return access;
   }
 
-  const subscription = await getSubscriptionByUserId(access.userId);
+  const subscription = await getSubscriptionWithStripeSync(access.userId);
   const voice = canUseVoiceInPlayground(subscription, access.agent);
 
   return {
@@ -205,7 +205,7 @@ export async function resolveVoiceDeployedAccess(input: {
     return access;
   }
 
-  const subscription = await getSubscriptionByUserId(access.agent.userId);
+  const subscription = await getSubscriptionWithStripeSync(access.agent.userId);
   const voice = canUseVoiceInPlayground(subscription, access.agent);
 
   return {

@@ -6,7 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   buildGeminiAudioInput,
+  buildGeminiEphemeralSetupMessage,
+  extractGeminiErrorMessage,
   mapGeminiServerMessage,
+  parseWebSocketJsonMessage,
 } from "@/lib/gemini/voice-messages";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +35,23 @@ type VoiceSessionResponse = {
   conversationId: string;
   wsUrl: string;
 };
+
+type TranscriptEntry = {
+  role: "user" | "assistant";
+  text: string;
+  isStreaming?: boolean;
+};
+
+function appendTranscriptText(existing: string, chunk: string) {
+  if (!chunk) {
+    return existing;
+  }
+  if (!existing) {
+    return chunk;
+  }
+  const needsSpace = !existing.endsWith(" ") && !/^[,.!?;:\s]/.test(chunk);
+  return existing + (needsSpace ? " " : "") + chunk;
+}
 
 function int16ToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
@@ -84,17 +104,18 @@ export function AgentVoice({
 }: AgentVoiceProps) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState<
-    Array<{ role: "user" | "assistant"; text: string }>
-  >([]);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
   const captureContextRef = useRef<AudioContext | null>(null);
   const playbackContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const captureNodeRef = useRef<AudioWorkletNode | null>(null);
   const playbackNodeRef = useRef<AudioWorkletNode | null>(null);
   const isActiveRef = useRef(false);
+  const setupCompleteRef = useRef(false);
+  const setupTimeoutRef = useRef<number | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const sessionStartedAtRef = useRef<number | null>(null);
   const voiceApiUrl = buildVoiceApiUrl(agentId, mode, apiKey, visitorId);
@@ -140,8 +161,17 @@ export function AgentVoice({
     });
   }, [voiceApiUrl]);
 
-  const teardown = useCallback(async () => {
+  const clearSetupTimeout = useCallback(() => {
+    if (setupTimeoutRef.current !== null) {
+      window.clearTimeout(setupTimeoutRef.current);
+      setupTimeoutRef.current = null;
+    }
+  }, []);
+
+  const cleanupResources = useCallback(async () => {
     isActiveRef.current = false;
+    setupCompleteRef.current = false;
+    clearSetupTimeout();
     completeSession();
 
     if (wsRef.current) {
@@ -163,15 +193,33 @@ export function AgentVoice({
     await playbackContextRef.current?.close();
     captureContextRef.current = null;
     playbackContextRef.current = null;
+  }, [clearSetupTimeout, completeSession]);
 
+  const endSession = useCallback(async () => {
+    await cleanupResources();
+    setError(null);
     setStatus("idle");
-  }, [completeSession]);
+  }, [cleanupResources]);
+
+  const failSession = useCallback(
+    async (message: string) => {
+      await cleanupResources();
+      setError(message);
+      setStatus("error");
+    },
+    [cleanupResources],
+  );
 
   useEffect(() => {
     return () => {
-      void teardown();
+      void cleanupResources();
     };
-  }, [teardown]);
+  }, [cleanupResources]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when transcript updates
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript]);
 
   async function startSession() {
     if (!voiceAvailable || isActiveRef.current) {
@@ -192,6 +240,7 @@ export function AgentVoice({
         const message =
           ("reason" in sessionData && sessionData.reason) ||
           ("message" in sessionData && sessionData.message) ||
+          ("error" in sessionData && sessionData.error) ||
           "Failed to start voice session";
         throw new Error(message);
       }
@@ -231,117 +280,193 @@ export function AgentVoice({
       const ws = new WebSocket(session.wsUrl);
       wsRef.current = ws;
 
+      setupTimeoutRef.current = window.setTimeout(() => {
+        if (!setupCompleteRef.current && isActiveRef.current) {
+          void failSession(
+            "Timed out waiting for voice session setup. Check your Gemini API key and voice model configuration.",
+          );
+        }
+      }, 20_000);
+
       ws.onopen = () => {
+        ws.send(JSON.stringify(buildGeminiEphemeralSetupMessage()));
         setStatus("connecting");
       };
 
       ws.onmessage = (event) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(event.data as string);
-        } catch {
-          return;
-        }
-
-        const geminiMessage = parsed as { setupComplete?: unknown };
-
-        if (geminiMessage.setupComplete) {
-          setStatus("listening");
-
-          const source = captureContext.createMediaStreamSource(stream);
-          const captureNode = new AudioWorkletNode(
-            captureContext,
-            "capture-processor",
+        void (async () => {
+          const parsed = await parseWebSocketJsonMessage(
+            event.data as string | ArrayBuffer | Blob,
           );
-          captureNode.port.onmessage = (portEvent) => {
-            if (ws.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            ws.send(
-              JSON.stringify(
-                buildGeminiAudioInput(
-                  int16ToBase64(portEvent.data as ArrayBuffer),
-                ),
-              ),
-            );
-          };
-          source.connect(captureNode);
-          captureNodeRef.current = captureNode;
-          return;
-        }
-
-        for (const message of mapGeminiServerMessage(
-          parsed as Parameters<typeof mapGeminiServerMessage>[0],
-        )) {
-          if (message.type === "audio") {
-            setStatus("speaking");
-            const samples = base64ToFloat32(message.data);
-            playbackNode.port.postMessage(samples.buffer, [samples.buffer]);
-            continue;
+          if (!parsed) {
+            return;
           }
 
-          if (message.type === "transcription") {
-            setTranscript((current) => [
-              ...current,
-              { role: message.role, text: message.text },
-            ]);
-            persistTranscript(
-              session.conversationId,
-              message.role,
-              message.text,
+          const geminiError = extractGeminiErrorMessage(parsed);
+          if (geminiError) {
+            void failSession(geminiError);
+            return;
+          }
+
+          const geminiMessage = parsed as { setupComplete?: unknown };
+
+          if (geminiMessage.setupComplete) {
+            setupCompleteRef.current = true;
+            clearSetupTimeout();
+            setStatus("listening");
+
+            const source = captureContext.createMediaStreamSource(stream);
+            const captureNode = new AudioWorkletNode(
+              captureContext,
+              "capture-processor",
             );
-            if (message.role === "user") {
+            captureNode.port.onmessage = (portEvent) => {
+              if (ws.readyState !== WebSocket.OPEN) {
+                return;
+              }
+              ws.send(
+                JSON.stringify(
+                  buildGeminiAudioInput(
+                    int16ToBase64(portEvent.data as ArrayBuffer),
+                  ),
+                ),
+              );
+            };
+            source.connect(captureNode);
+            captureNodeRef.current = captureNode;
+            return;
+          }
+
+          for (const message of mapGeminiServerMessage(
+            parsed as Parameters<typeof mapGeminiServerMessage>[0],
+          )) {
+            if (message.type === "audio") {
+              setStatus("speaking");
+              const samples = base64ToFloat32(message.data);
+              playbackNode.port.postMessage(samples.buffer, [samples.buffer]);
+              continue;
+            }
+
+            if (message.type === "transcription") {
+              setTranscript((current) => {
+                const last = current[current.length - 1];
+                let next = current;
+
+                if (last?.isStreaming && last.role !== message.role) {
+                  persistTranscript(
+                    session.conversationId,
+                    last.role,
+                    last.text,
+                  );
+                  next = [
+                    ...current.slice(0, -1),
+                    { ...last, isStreaming: false },
+                  ];
+                }
+
+                const streaming = next[next.length - 1];
+                if (streaming?.role === message.role && streaming.isStreaming) {
+                  return [
+                    ...next.slice(0, -1),
+                    {
+                      ...streaming,
+                      text: appendTranscriptText(streaming.text, message.text),
+                    },
+                  ];
+                }
+
+                return [
+                  ...next,
+                  {
+                    role: message.role,
+                    text: message.text,
+                    isStreaming: true,
+                  },
+                ];
+              });
+              if (message.role === "user") {
+                setStatus("listening");
+              }
+              continue;
+            }
+
+            if (message.type === "interrupted") {
+              setTranscript((current) => {
+                const last = current[current.length - 1];
+                if (last?.isStreaming) {
+                  return [
+                    ...current.slice(0, -1),
+                    { ...last, isStreaming: false },
+                  ];
+                }
+                return current;
+              });
+              setStatus("listening");
+              continue;
+            }
+
+            if (message.type === "turn_complete") {
+              setTranscript((current) => {
+                const last = current[current.length - 1];
+                if (last?.isStreaming) {
+                  persistTranscript(
+                    session.conversationId,
+                    last.role,
+                    last.text,
+                  );
+                  return [
+                    ...current.slice(0, -1),
+                    { ...last, isStreaming: false },
+                  ];
+                }
+                return current;
+              });
               setStatus("listening");
             }
-            continue;
           }
-
-          if (message.type === "interrupted") {
-            setStatus("listening");
-            continue;
-          }
-
-          if (message.type === "turn_complete") {
-            setStatus("listening");
-          }
-        }
+        })();
       };
 
       ws.onerror = () => {
-        setError("Voice connection failed");
-        setStatus("error");
-        void teardown();
+        void failSession("Voice connection failed");
       };
 
       ws.onclose = (event) => {
-        if (event.code !== 1000 && !error) {
-          setError(event.reason || "Voice session ended");
+        if (!isActiveRef.current) {
+          return;
         }
-        void teardown();
+
+        if (!setupCompleteRef.current) {
+          void failSession(
+            event.reason ||
+              "Voice connection closed before setup completed. Verify your Gemini API configuration.",
+          );
+          return;
+        }
+
+        void failSession(event.reason || "Voice session ended unexpectedly");
       };
     } catch (startError) {
       const message =
         startError instanceof Error
           ? startError.message
           : "Failed to start voice session";
-      setError(message);
-      setStatus("error");
-      await teardown();
+      await failSession(message);
     }
   }
 
   const isBusy = status === "connecting";
 
   return (
-    <section className="flex min-h-[560px] flex-col rounded-2xl border border-border bg-card">
-      <header className="border-b border-border px-4 py-3">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+      <header className="shrink-0 border-b border-border px-4 py-3">
         <h2 className="font-medium">Voice with {agentName}</h2>
         <p className="text-sm text-muted-foreground">
           Real-time audio via the Gemini Live API.
         </p>
       </header>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         {!voiceAvailable ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border p-6 text-center">
             <MicOff className="size-8 text-muted-foreground" />
@@ -365,7 +490,7 @@ export function AgentVoice({
           <div className="space-y-3">
             {transcript.map((entry, index) => (
               <div
-                key={`${entry.role}-${index}-${entry.text.slice(0, 12)}`}
+                key={`${entry.role}-${index}`}
                 className={cn(
                   "max-w-[90%] rounded-2xl px-4 py-3 text-sm",
                   entry.role === "user"
@@ -382,6 +507,8 @@ export function AgentVoice({
           </div>
         )}
 
+        <div ref={transcriptEndRef} />
+
         {status === "speaking" && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
@@ -391,12 +518,12 @@ export function AgentVoice({
       </div>
 
       {error && (
-        <div className="mx-4 mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div className="mx-4 mb-2 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border p-4">
         <p className="text-sm text-muted-foreground">
           {status === "idle" && voiceAvailable && "Ready to connect"}
           {status === "connecting" && "Connecting…"}
@@ -407,16 +534,16 @@ export function AgentVoice({
         </p>
 
         <div className="flex items-center gap-2">
-          {status === "idle" ? (
+          {status === "idle" || status === "error" ? (
             <Button
               onClick={() => void startSession()}
               disabled={!voiceAvailable || isBusy}
             >
               <Mic />
-              Start voice
+              {status === "error" ? "Retry voice" : "Start voice"}
             </Button>
           ) : (
-            <Button variant="secondary" onClick={() => void teardown()}>
+            <Button variant="secondary" onClick={() => void endSession()}>
               <PhoneOff />
               End session
             </Button>

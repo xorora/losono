@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import {
   countContextSources,
   getAgentForUser,
@@ -28,7 +28,10 @@ async function requireAgentOwner(agentId: string) {
     };
   }
 
-  const subscription = await getSubscriptionByUserId(userId);
+  const subscription = await getSubscriptionWithStripeSync(
+    userId,
+    session?.user?.email,
+  );
   return { userId, agent, subscription };
 }
 

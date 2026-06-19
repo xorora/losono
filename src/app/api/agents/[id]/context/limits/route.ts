@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import {
   countContextSources,
   getAgentForUser,
@@ -25,7 +25,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return Response.json({ error: "agent_not_found" }, { status: 404 });
   }
 
-  const subscription = await getSubscriptionByUserId(userId);
+  const subscription = await getSubscriptionWithStripeSync(
+    userId,
+    session?.user?.email,
+  );
   const used = await countContextSources(agentId);
   const limit = getContextFileLimit(subscription);
 

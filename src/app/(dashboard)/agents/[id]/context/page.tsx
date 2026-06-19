@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/auth";
 import { ContextManager } from "@/components/dashboard/context-manager";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { getAgentForUser } from "@/lib/db/queries/agents";
 import {
   getContextFileLimit,
@@ -38,7 +38,7 @@ async function ContextContent({ params }: ContextPageProps) {
   }
 
   const [subscription, sources] = await Promise.all([
-    getSubscriptionByUserId(userId),
+    getSubscriptionWithStripeSync(userId, session?.user?.email),
     listContextSources(agent.id),
   ]);
 

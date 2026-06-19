@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/auth";
 import { AgentSettingsForm } from "@/components/dashboard/agent-settings-form";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { getAgentForUser } from "@/lib/db/queries/agents";
 
 type AgentSettingsPageProps = {
@@ -31,7 +31,10 @@ async function SettingsContent({ params }: AgentSettingsPageProps) {
     notFound();
   }
 
-  const subscription = await getSubscriptionByUserId(userId);
+  const subscription = await getSubscriptionWithStripeSync(
+    userId,
+    session?.user?.email,
+  );
   const voiceAvailable = subscription?.voiceEnabled ?? false;
 
   return (

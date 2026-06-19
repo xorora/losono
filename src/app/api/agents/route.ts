@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import {
   countAgentsForUser,
   createAgent,
@@ -56,7 +56,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "name_required" }, { status: 400 });
   }
 
-  const subscription = await getSubscriptionByUserId(userId);
+  const subscription = await getSubscriptionWithStripeSync(
+    userId,
+    session?.user?.email,
+  );
   const agentLimit = subscription?.agentLimit ?? 1;
   const activeAgents = await countAgentsForUser(userId);
 

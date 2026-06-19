@@ -383,3 +383,76 @@
 html[data-magicui-theme-vt="active"]::view-transition-group(root) {
   animation-duration: var(--magicui-theme-toggle-vt-duration);
 }
+
+.chat-markdown :where(p) {
+  margin: 0.5rem 0;
+}
+
+.chat-markdown :where(h1, h2, h3, h4) {
+  margin: 0.75rem 0 0.35rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.chat-markdown :where(h1) {
+  font-size: 1.125rem;
+}
+
+.chat-markdown :where(h2) {
+  font-size: 1rem;
+}
+
+.chat-markdown :where(h3, h4) {
+  font-size: 0.9375rem;
+}
+
+.chat-markdown :where(ul, ol) {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.chat-markdown :where(ul) {
+  list-style-type: disc;
+}
+
+.chat-markdown :where(ol) {
+  list-style-type: decimal;
+}
+
+.chat-markdown :where(li) {
+  margin: 0.2rem 0;
+}
+
+.chat-markdown :where(blockquote) {
+  margin: 0.5rem 0;
+  border-left: 3px solid color-mix(in oklab, var(--foreground) 20%, transparent);
+  padding-left: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.chat-markdown :where(table) {
+  margin: 0.5rem 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.chat-markdown :where(th, td) {
+  border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.chat-markdown :where(hr) {
+  margin: 0.75rem 0;
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+.chat-markdown-inverted :where(code) {
+  background: rgb(255 255 255 / 0.15);
+}
+
+.chat-markdown-inverted :where(pre) {
+  background: rgb(255 255 255 / 0.12);
+}
