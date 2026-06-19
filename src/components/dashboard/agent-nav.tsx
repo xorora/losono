@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 const links = [
   { href: (id: string) => `/agents/${id}`, label: "Settings" },
+  { href: (id: string) => `/agents/${id}/prompt`, label: "Prompt" },
   { href: (id: string) => `/agents/${id}/context`, label: "Context" },
   { href: (id: string) => `/agents/${id}/playground`, label: "Playground" },
   { href: (id: string) => `/agents/${id}/deploy`, label: "Deploy" },
@@ -11,7 +12,7 @@ const links = [
 type AgentNavProps = {
   agentId: string;
   agentName: string;
-  current: "settings" | "context" | "playground" | "deploy";
+  current: "settings" | "prompt" | "context" | "playground" | "deploy";
 };
 
 export function AgentNav({ agentId, agentName, current }: AgentNavProps) {
@@ -26,6 +27,7 @@ export function AgentNav({ agentId, agentName, current }: AgentNavProps) {
           const href = link.href(agentId);
           const isActive =
             (current === "settings" && link.label === "Settings") ||
+            (current === "prompt" && link.label === "Prompt") ||
             (current === "context" && link.label === "Context") ||
             (current === "playground" && link.label === "Playground") ||
             (current === "deploy" && link.label === "Deploy");

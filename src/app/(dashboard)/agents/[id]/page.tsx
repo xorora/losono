@@ -45,7 +45,6 @@ async function SettingsContent({ params }: AgentSettingsPageProps) {
       <AgentSettingsForm
         agentId={agent.id}
         initialName={agent.name}
-        initialUserPrompt={agent.userPrompt}
         initialVoiceEnabled={agent.voiceEnabled}
         voiceAvailable={voiceAvailable}
       />

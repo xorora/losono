@@ -87,7 +87,7 @@ export function PricingSection() {
                     {plan.price}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    {plan.period}
+                    &nbsp;{plan.period}
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">

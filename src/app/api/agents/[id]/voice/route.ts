@@ -3,9 +3,16 @@ import {
   resolveVoiceDeployedAccess,
   resolveVoicePlaygroundAccess,
 } from "@/lib/auth/deploy-access";
-import { startVoiceProxySession } from "@/lib/gemini/voice-proxy";
+import {
+  getConversationForAgentUser,
+  insertMessage,
+} from "@/lib/db/queries/conversations";
+import {
+  completeVoiceSession,
+  createVoiceSession,
+} from "@/lib/gemini/voice-session";
 
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -66,53 +73,46 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   return Response.json({ voiceAvailable: true, mode: "deploy" });
 }
 
-export function UPGRADE(
-  client: import("ws").WebSocket,
-  _server: import("ws").WebSocketServer,
-  request: NextRequest,
-  context: import("next-ws/server").RouteContext<"/api/agents/[id]/voice">,
-) {
-  void handleVoiceUpgrade(client, request, context);
-}
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  const { id: agentId } = await params;
+  const mode = getVoiceMode(request);
 
-async function handleVoiceUpgrade(
-  client: import("ws").WebSocket,
-  request: NextRequest,
-  context: import("next-ws/server").RouteContext<"/api/agents/[id]/voice">,
-) {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    return Response.json(
+      {
+        error: "gemini_not_configured",
+        message: "Gemini API key is not configured",
+      },
+      { status: 503 },
+    );
+  }
+
   try {
-    const { id: agentId } = await context.params;
-    const mode = getVoiceMode(request);
-
     if (mode === "playground") {
       const result = await resolveVoicePlaygroundAccess(agentId);
 
       if (result instanceof Response) {
-        client.close(4401, "Unauthorized");
-        return;
+        return result;
       }
 
       if (!result.voiceAllowed) {
-        client.close(4403, result.voiceReason ?? "Voice unavailable");
-        return;
+        return Response.json(
+          {
+            error: "voice_unavailable",
+            reason: result.voiceReason,
+          },
+          { status: 403 },
+        );
       }
 
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-        client.close(4503, "Gemini not configured");
-        return;
-      }
-
-      const { default: WebSocketImpl } = await import("ws");
-
-      await startVoiceProxySession({
-        client,
+      const session = await createVoiceSession({
         agent: result.agent,
         agentId,
         userId: result.userId,
         mode: "playground",
-        WebSocketImpl,
       });
-      return;
+
+      return Response.json(session);
     }
 
     const result = await resolveVoiceDeployedAccess({
@@ -123,32 +123,159 @@ async function handleVoiceUpgrade(
     });
 
     if (result instanceof Response) {
-      client.close(4401, "Unauthorized");
-      return;
+      return result;
     }
 
     if (!result.voiceAllowed) {
-      client.close(4403, result.voiceReason ?? "Voice unavailable");
-      return;
+      return Response.json(
+        {
+          error: "voice_unavailable",
+          reason: result.voiceReason,
+        },
+        { status: 403 },
+      );
     }
 
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      client.close(4503, "Gemini not configured");
-      return;
-    }
-
-    const { default: WebSocketImpl } = await import("ws");
-
-    await startVoiceProxySession({
-      client,
+    const session = await createVoiceSession({
       agent: result.agent,
       agentId,
       visitorId: result.visitorId,
       mode: "voice",
-      WebSocketImpl,
     });
+
+    return Response.json(session);
   } catch (error) {
-    console.error("Voice upgrade failed:", error);
-    client.close(1011, "Voice session failed");
+    console.error("Voice session creation failed:", error);
+    return Response.json(
+      {
+        error: "voice_session_failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to start voice session",
+      },
+      { status: 500 },
+    );
   }
+}
+
+type VoicePatchBody = {
+  action: "transcript" | "complete";
+  conversationId: string;
+  role?: "user" | "assistant";
+  text?: string;
+  sessionStartedAt?: number;
+};
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const { id: agentId } = await params;
+  const mode = getVoiceMode(request);
+
+  let body: VoicePatchBody;
+  try {
+    body = (await request.json()) as VoicePatchBody;
+  } catch {
+    return Response.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  if (!body.conversationId) {
+    return Response.json(
+      { error: "conversation_id_required" },
+      { status: 400 },
+    );
+  }
+
+  if (mode === "playground") {
+    const access = await resolveVoicePlaygroundAccess(agentId);
+    if (access instanceof Response) {
+      return access;
+    }
+
+    const conversation = await getConversationForAgentUser(
+      body.conversationId,
+      agentId,
+      access.userId,
+    );
+    if (!conversation) {
+      return Response.json(
+        { error: "conversation_not_found" },
+        { status: 404 },
+      );
+    }
+
+    if (body.action === "transcript") {
+      if (!body.text?.trim() || !body.role) {
+        return Response.json({ error: "transcript_required" }, { status: 400 });
+      }
+
+      await insertMessage({
+        conversationId: body.conversationId,
+        role: body.role,
+        content: body.text.trim(),
+      });
+
+      return Response.json({ ok: true });
+    }
+
+    if (body.action === "complete") {
+      if (typeof body.sessionStartedAt !== "number") {
+        return Response.json(
+          { error: "session_started_at_required" },
+          { status: 400 },
+        );
+      }
+
+      await completeVoiceSession({
+        agentId,
+        sessionStartedAt: body.sessionStartedAt,
+      });
+
+      return Response.json({ ok: true });
+    }
+
+    return Response.json({ error: "invalid_action" }, { status: 400 });
+  }
+
+  const access = await resolveVoiceDeployedAccess({
+    agentId,
+    request,
+    apiKeyFromQuery: request.nextUrl.searchParams.get("apiKey"),
+    visitorId: request.nextUrl.searchParams.get("visitorId") ?? undefined,
+  });
+
+  if (access instanceof Response) {
+    return access;
+  }
+
+  if (body.action === "transcript") {
+    if (!body.text?.trim() || !body.role) {
+      return Response.json({ error: "transcript_required" }, { status: 400 });
+    }
+
+    await insertMessage({
+      conversationId: body.conversationId,
+      role: body.role,
+      content: body.text.trim(),
+    });
+
+    return Response.json({ ok: true });
+  }
+
+  if (body.action === "complete") {
+    if (typeof body.sessionStartedAt !== "number") {
+      return Response.json(
+        { error: "session_started_at_required" },
+        { status: 400 },
+      );
+    }
+
+    await completeVoiceSession({
+      agentId,
+      sessionStartedAt: body.sessionStartedAt,
+    });
+
+    return Response.json({ ok: true });
+  }
+
+  return Response.json({ error: "invalid_action" }, { status: 400 });
 }

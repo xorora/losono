@@ -16,11 +16,11 @@ type PlaygroundPageProps = {
 
 function PlaygroundFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-6 md:p-8">
-      <div className="h-40 animate-pulse rounded-2xl border border-border bg-muted/40" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="h-[560px] animate-pulse rounded-2xl border border-border bg-muted/40" />
-        <div className="h-[560px] animate-pulse rounded-2xl border border-border bg-muted/40" />
+    <div className="mx-auto flex h-[calc(100svh-3.5rem)] w-full max-w-6xl flex-col gap-6 overflow-hidden p-6 md:p-8">
+      <div className="h-40 shrink-0 animate-pulse rounded-2xl border border-border bg-muted/40" />
+      <div className="grid min-h-0 flex-1 grid-rows-2 gap-6 xl:grid-cols-2 xl:grid-rows-1">
+        <div className="min-h-0 animate-pulse rounded-2xl border border-border bg-muted/40" />
+        <div className="min-h-0 animate-pulse rounded-2xl border border-border bg-muted/40" />
       </div>
     </div>
   );
@@ -45,8 +45,8 @@ async function PlaygroundContent({ params }: PlaygroundPageProps) {
   const canPublish = agent.userPrompt.trim().length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-6 md:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto flex h-[calc(100svh-3.5rem)] w-full max-w-6xl flex-col gap-6 overflow-hidden p-6 md:p-8">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground">Agent</p>
           <h1 className="text-3xl font-semibold tracking-tight">
@@ -68,27 +68,26 @@ async function PlaygroundContent({ params }: PlaygroundPageProps) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+      <div className="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
         Sandbox mode — this agent is not live. Chat is available on all plans;
         voice requires Pro.
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <AgentChat
-          agentId={agent.id}
-          agentName={agent.name}
-          userPrompt={agent.userPrompt}
-        />
+      <div className="grid min-h-0 flex-1 grid-rows-2 gap-6 xl:grid-cols-2 xl:grid-rows-1">
+        <div className="min-h-0">
+          <AgentChat agentId={agent.id} agentName={agent.name} />
+        </div>
 
-        <AgentVoice
-          agentId={agent.id}
-          agentName={agent.name}
-          userPrompt={agent.userPrompt}
-          voiceAvailable={voiceAccess.allowed}
-          voiceBlockedReason={
-            voiceAccess.allowed ? undefined : voiceAccess.reason
-          }
-        />
+        <div className="min-h-0">
+          <AgentVoice
+            agentId={agent.id}
+            agentName={agent.name}
+            voiceAvailable={voiceAccess.allowed}
+            voiceBlockedReason={
+              voiceAccess.allowed ? undefined : voiceAccess.reason
+            }
+          />
+        </div>
       </div>
     </div>
   );

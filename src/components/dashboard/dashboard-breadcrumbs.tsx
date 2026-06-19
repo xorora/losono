@@ -13,6 +13,7 @@ import {
 
 const agentSectionLabels: Record<string, string> = {
   settings: "Settings",
+  prompt: "Prompt",
   context: "Context",
   playground: "Playground",
   deploy: "Deploy",

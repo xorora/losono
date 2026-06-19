@@ -47,6 +47,11 @@ const agentLinks = [
     segment: "settings",
   },
   {
+    href: (id: string) => `/agents/${id}/prompt`,
+    label: "Prompt",
+    segment: "prompt",
+  },
+  {
     href: (id: string) => `/agents/${id}/context`,
     label: "Context",
     segment: "context",

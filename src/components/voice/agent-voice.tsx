@@ -3,18 +3,21 @@
 import { Loader2, Mic, MicOff, PhoneOff } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PromptPreview } from "@/components/chat/prompt-preview";
 import { Button } from "@/components/ui/button";
-import type { VoiceServerMessage } from "@/lib/gemini/voice-messages";
-import type { PromptPreviewChunk } from "@/lib/prompts";
+import {
+  buildGeminiAudioInput,
+  mapGeminiServerMessage,
+} from "@/lib/gemini/voice-messages";
 import { cn } from "@/lib/utils";
 
 type AgentVoiceProps = {
   agentId: string;
   agentName: string;
-  userPrompt: string;
   voiceAvailable: boolean;
   voiceBlockedReason?: string;
+  mode?: "playground" | "deploy";
+  apiKey?: string;
+  visitorId?: string;
 };
 
 type VoiceStatus =
@@ -25,14 +28,10 @@ type VoiceStatus =
   | "speaking"
   | "error";
 
-function getWebSocketUrl(agentId: string) {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/api/agents/${agentId}/voice`;
-}
+type VoiceSessionResponse = {
+  conversationId: string;
+  wsUrl: string;
+};
 
 function int16ToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
@@ -58,20 +57,35 @@ function base64ToFloat32(base64: string) {
   return float32;
 }
 
+function buildVoiceApiUrl(
+  agentId: string,
+  mode: "playground" | "deploy",
+  apiKey?: string,
+  visitorId?: string,
+) {
+  const params = new URLSearchParams({ mode });
+  if (apiKey) {
+    params.set("apiKey", apiKey);
+  }
+  if (visitorId) {
+    params.set("visitorId", visitorId);
+  }
+  return `/api/agents/${agentId}/voice?${params.toString()}`;
+}
+
 export function AgentVoice({
   agentId,
   agentName,
-  userPrompt,
   voiceAvailable,
   voiceBlockedReason,
+  mode = "playground",
+  apiKey,
+  visitorId,
 }: AgentVoiceProps) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<
     Array<{ role: "user" | "assistant"; text: string }>
-  >([]);
-  const [retrievedContext, setRetrievedContext] = useState<
-    PromptPreviewChunk[]
   >([]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -81,9 +95,54 @@ export function AgentVoice({
   const captureNodeRef = useRef<AudioWorkletNode | null>(null);
   const playbackNodeRef = useRef<AudioWorkletNode | null>(null);
   const isActiveRef = useRef(false);
+  const conversationIdRef = useRef<string | null>(null);
+  const sessionStartedAtRef = useRef<number | null>(null);
+  const voiceApiUrl = buildVoiceApiUrl(agentId, mode, apiKey, visitorId);
+
+  const persistTranscript = useCallback(
+    (conversationId: string, role: "user" | "assistant", text: string) => {
+      void fetch(voiceApiUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "transcript",
+          conversationId,
+          role,
+          text,
+        }),
+      }).catch((persistError) => {
+        console.error("Failed to persist voice transcription:", persistError);
+      });
+    },
+    [voiceApiUrl],
+  );
+
+  const completeSession = useCallback(() => {
+    const conversationId = conversationIdRef.current;
+    const sessionStartedAt = sessionStartedAtRef.current;
+    conversationIdRef.current = null;
+    sessionStartedAtRef.current = null;
+
+    if (!conversationId || sessionStartedAt === null) {
+      return;
+    }
+
+    void fetch(voiceApiUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "complete",
+        conversationId,
+        sessionStartedAt,
+      }),
+    }).catch((completeError) => {
+      console.error("Failed to record voice usage:", completeError);
+    });
+  }, [voiceApiUrl]);
 
   const teardown = useCallback(async () => {
     isActiveRef.current = false;
+    completeSession();
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -106,7 +165,7 @@ export function AgentVoice({
     playbackContextRef.current = null;
 
     setStatus("idle");
-  }, []);
+  }, [completeSession]);
 
   useEffect(() => {
     return () => {
@@ -124,6 +183,23 @@ export function AgentVoice({
     isActiveRef.current = true;
 
     try {
+      const sessionResponse = await fetch(voiceApiUrl, { method: "POST" });
+      const sessionData = (await sessionResponse.json()) as
+        | VoiceSessionResponse
+        | { message?: string; reason?: string; error?: string };
+
+      if (!sessionResponse.ok) {
+        const message =
+          ("reason" in sessionData && sessionData.reason) ||
+          ("message" in sessionData && sessionData.message) ||
+          "Failed to start voice session";
+        throw new Error(message);
+      }
+
+      const session = sessionData as VoiceSessionResponse;
+      conversationIdRef.current = session.conversationId;
+      sessionStartedAtRef.current = Date.now();
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -152,7 +228,7 @@ export function AgentVoice({
       playbackNode.connect(playbackContext.destination);
       playbackNodeRef.current = playbackNode;
 
-      const ws = new WebSocket(getWebSocketUrl(agentId));
+      const ws = new WebSocket(session.wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -160,15 +236,16 @@ export function AgentVoice({
       };
 
       ws.onmessage = (event) => {
-        let message: VoiceServerMessage;
+        let parsed: unknown;
         try {
-          message = JSON.parse(event.data) as VoiceServerMessage;
+          parsed = JSON.parse(event.data as string);
         } catch {
           return;
         }
 
-        if (message.type === "ready") {
-          setRetrievedContext(message.preview.context);
+        const geminiMessage = parsed as { setupComplete?: unknown };
+
+        if (geminiMessage.setupComplete) {
           setStatus("listening");
 
           const source = captureContext.createMediaStreamSource(stream);
@@ -181,10 +258,11 @@ export function AgentVoice({
               return;
             }
             ws.send(
-              JSON.stringify({
-                type: "audio",
-                data: int16ToBase64(portEvent.data as ArrayBuffer),
-              }),
+              JSON.stringify(
+                buildGeminiAudioInput(
+                  int16ToBase64(portEvent.data as ArrayBuffer),
+                ),
+              ),
             );
           };
           source.connect(captureNode);
@@ -192,37 +270,40 @@ export function AgentVoice({
           return;
         }
 
-        if (message.type === "audio") {
-          setStatus("speaking");
-          const samples = base64ToFloat32(message.data);
-          playbackNode.port.postMessage(samples.buffer, [samples.buffer]);
-          return;
-        }
+        for (const message of mapGeminiServerMessage(
+          parsed as Parameters<typeof mapGeminiServerMessage>[0],
+        )) {
+          if (message.type === "audio") {
+            setStatus("speaking");
+            const samples = base64ToFloat32(message.data);
+            playbackNode.port.postMessage(samples.buffer, [samples.buffer]);
+            continue;
+          }
 
-        if (message.type === "transcription") {
-          setTranscript((current) => [
-            ...current,
-            { role: message.role, text: message.text },
-          ]);
-          if (message.role === "user") {
+          if (message.type === "transcription") {
+            setTranscript((current) => [
+              ...current,
+              { role: message.role, text: message.text },
+            ]);
+            persistTranscript(
+              session.conversationId,
+              message.role,
+              message.text,
+            );
+            if (message.role === "user") {
+              setStatus("listening");
+            }
+            continue;
+          }
+
+          if (message.type === "interrupted") {
+            setStatus("listening");
+            continue;
+          }
+
+          if (message.type === "turn_complete") {
             setStatus("listening");
           }
-          return;
-        }
-
-        if (message.type === "interrupted") {
-          setStatus("listening");
-          return;
-        }
-
-        if (message.type === "turn_complete") {
-          setStatus("listening");
-          return;
-        }
-
-        if (message.type === "error") {
-          setError(message.message);
-          setStatus("error");
         }
       };
 
@@ -233,9 +314,7 @@ export function AgentVoice({
       };
 
       ws.onclose = (event) => {
-        if (event.code === 4403) {
-          setError(event.reason || "Voice not available on free plan");
-        } else if (event.code !== 1000 && !error) {
+        if (event.code !== 1000 && !error) {
           setError(event.reason || "Voice session ended");
         }
         void teardown();
@@ -258,7 +337,7 @@ export function AgentVoice({
       <header className="border-b border-border px-4 py-3">
         <h2 className="font-medium">Voice with {agentName}</h2>
         <p className="text-sm text-muted-foreground">
-          Real-time audio via the Gemini Live API proxy.
+          Real-time audio via the Gemini Live API.
         </p>
       </header>
 
@@ -344,22 +423,6 @@ export function AgentVoice({
           )}
         </div>
       </div>
-
-      {retrievedContext.length > 0 && (
-        <div className="border-t border-border p-4">
-          <details className="text-sm">
-            <summary className="cursor-pointer font-medium">
-              Session context preview
-            </summary>
-            <div className="mt-3">
-              <PromptPreview
-                userPrompt={userPrompt}
-                context={retrievedContext}
-              />
-            </div>
-          </details>
-        </div>
-      )}
     </section>
   );
 }

@@ -17,6 +17,7 @@
     "@ai-sdk/google": "^3.0.83",
     "@ai-sdk/react": "^3.0.210",
     "@auth/drizzle-adapter": "^1.11.2",
+    "@google/genai": "^2.9.0",
     "@neondatabase/serverless": "^1.1.0",
     "ai": "^6.0.208",
     "class-variance-authority": "^0.7.1",
