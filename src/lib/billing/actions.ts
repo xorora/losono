@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type Stripe from "stripe";
 import { auth } from "@/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
@@ -34,8 +35,9 @@ async function startCheckout(formData: FormData) {
 
   const appUrl = getAppUrl();
 
+  let checkout: Stripe.Checkout.Session;
   try {
-    const checkout = await createCheckoutSession({
+    checkout = await createCheckoutSession({
       userId,
       email,
       stripeCustomerId: subscription?.stripeCustomerId,
@@ -43,16 +45,16 @@ async function startCheckout(formData: FormData) {
       successUrl: `${appUrl}/billing?checkout=success`,
       cancelUrl: `${appUrl}/billing?checkout=canceled`,
     });
-
-    if (!checkout.url) {
-      redirect("/billing?error=checkout_failed");
-    }
-
-    redirect(checkout.url);
   } catch (error) {
     console.error("[billing] checkout failed", error);
     redirect("/billing?error=checkout_failed");
   }
+
+  if (!checkout.url) {
+    redirect("/billing?error=checkout_failed");
+  }
+
+  redirect(checkout.url);
 }
 
 async function openPortal() {
