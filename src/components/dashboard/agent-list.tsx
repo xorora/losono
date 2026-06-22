@@ -18,7 +18,7 @@ export function AgentList({ agents }: AgentListProps) {
       <ul className="mt-4 divide-y divide-border rounded-xl border border-border">
         {agents.length === 0 ? (
           <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No agents yet. Create your first agent above.
+            No agents yet. Use Create Agent to get started.
           </li>
         ) : (
           agents.map((agent) => (

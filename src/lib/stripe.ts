@@ -96,3 +96,45 @@ export async function createBillingPortalSession({
     return_url: returnUrl,
   });
 }
+
+export async function findActiveSubscriptionForCustomer(
+  stripeCustomerId: string,
+): Promise<Stripe.Subscription | null> {
+  const stripe = getStripe();
+
+  const { data: subscriptions } = await stripe.subscriptions.list({
+    customer: stripeCustomerId,
+    status: "all",
+    limit: 10,
+  });
+
+  return (
+    subscriptions.find((subscription) =>
+      ["active", "trialing", "past_due", "unpaid"].includes(
+        subscription.status,
+      ),
+    ) ?? null
+  );
+}
+
+export async function updateSubscriptionSeatQuantity({
+  stripeSubscriptionId,
+  quantity,
+}: {
+  stripeSubscriptionId: string;
+  quantity: number;
+}): Promise<Stripe.Subscription> {
+  const stripe = getStripe();
+  const subscription =
+    await stripe.subscriptions.retrieve(stripeSubscriptionId);
+  const item = subscription.items.data[0];
+
+  if (!item) {
+    throw new Error("subscription_has_no_items");
+  }
+
+  return stripe.subscriptions.update(stripeSubscriptionId, {
+    items: [{ id: item.id, quantity: Math.max(quantity, 1) }],
+    proration_behavior: "create_prorations",
+  });
+}

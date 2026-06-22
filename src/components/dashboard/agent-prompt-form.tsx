@@ -1,9 +1,25 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 import { PromptPreview } from "@/components/chat/prompt-preview";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Textarea } from "@/components/ui/textarea";
+
+const agentPromptSchema = z.object({
+  userPrompt: z.string(),
+});
+
+type AgentPromptFormValues = z.infer<typeof agentPromptSchema>;
 
 type AgentPromptFormProps = {
   agentId: string;
@@ -15,22 +31,19 @@ export function AgentPromptForm({
   initialUserPrompt,
 }: AgentPromptFormProps) {
   const router = useRouter();
-  const [userPrompt, setUserPrompt] = useState(initialUserPrompt);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const form = useForm<AgentPromptFormValues>({
+    resolver: zodResolver(agentPromptSchema),
+    defaultValues: { userPrompt: initialUserPrompt },
+  });
 
-  async function handleSave(event: React.FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSaved(false);
+  const userPrompt = form.watch("userPrompt");
 
+  async function onSubmit(values: AgentPromptFormValues) {
     try {
       const response = await fetch(`/api/agents/${agentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userPrompt }),
+        body: JSON.stringify({ userPrompt: values.userPrompt }),
       });
 
       const data = (await response.json()) as {
@@ -42,21 +55,20 @@ export function AgentPromptForm({
         throw new Error(data.message ?? data.error ?? "Failed to save");
       }
 
-      setSaved(true);
+      toast.success("Prompt saved");
       router.refresh();
     } catch (saveError) {
-      setError(
+      toast.error(
         saveError instanceof Error ? saveError.message : "Failed to save",
       );
-    } finally {
-      setLoading(false);
     }
   }
 
   return (
     <form
-      onSubmit={handleSave}
+      onSubmit={form.handleSubmit(onSubmit)}
       className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
+      noValidate
     >
       <section className="space-y-4 rounded-2xl border border-border bg-card p-6">
         <div className="space-y-1">
@@ -67,29 +79,26 @@ export function AgentPromptForm({
           </p>
         </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-muted-foreground">Instructions</span>
-          <textarea
-            value={userPrompt}
-            onChange={(event) => setUserPrompt(event.target.value)}
+        <Field data-invalid={!!form.formState.errors.userPrompt}>
+          <FieldLabel htmlFor="user-prompt">Instructions</FieldLabel>
+          <Textarea
+            id="user-prompt"
             rows={14}
             placeholder="Describe how this agent should behave, what it knows, and any tone or formatting preferences."
-            className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            aria-invalid={!!form.formState.errors.userPrompt}
+            {...form.register("userPrompt")}
           />
-          <span className="text-xs text-muted-foreground">
-            Required before publishing.
-          </span>
-        </label>
+          <FieldDescription>Required before publishing.</FieldDescription>
+          <FieldError errors={[form.formState.errors.userPrompt]} />
+        </Field>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={loading}>
-            {loading ? "Saving…" : "Save prompt"}
-          </Button>
-          {saved && (
-            <span className="text-sm text-muted-foreground">Saved</span>
-          )}
-          {error && <span className="text-sm text-destructive">{error}</span>}
-        </div>
+        <Button
+          type="submit"
+          disabled={form.formState.isSubmitting}
+          className="mt-2.5"
+        >
+          {form.formState.isSubmitting ? "Saving…" : "Save prompt"}
+        </Button>
       </section>
 
       <aside className="rounded-2xl border border-border bg-card p-4">

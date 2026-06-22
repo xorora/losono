@@ -1,16 +1,24 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { auth } from "@/auth";
 import { AgentList } from "@/components/dashboard/agent-list";
-import { CreateAgentForm } from "@/components/dashboard/create-agent-form";
-import { Button } from "@/components/ui/button";
+import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
+import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
+import { canCreateAgent, getBilledSeatCount } from "@/lib/billing/agent-limits";
 import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { listAgentsForUser } from "@/lib/db/queries/agents";
+import { getUserDashboardStats } from "@/lib/db/queries/dashboard";
 
 function DashboardFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-6 md:p-8">
-      <div className="h-48 animate-pulse rounded-2xl border border-border bg-muted/40" />
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-6 md:p-8">
+      <div className="h-10 w-48 animate-pulse rounded-lg bg-muted/40" />
+      <div className="grid gap-4 lg:grid-cols-12">
+        <div className="h-96 animate-pulse rounded-xl bg-muted/40 lg:col-span-8" />
+        <div className="grid gap-4 lg:col-span-4">
+          <div className="h-56 animate-pulse rounded-xl bg-muted/40" />
+          <div className="h-56 animate-pulse rounded-xl bg-muted/40" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -22,67 +30,38 @@ async function DashboardContent() {
     return null;
   }
 
-  const [subscription, agents] = await Promise.all([
+  const [subscription, agents, stats] = await Promise.all([
     getSubscriptionWithStripeSync(session.user.id, session.user.email),
     listAgentsForUser(session.user.id),
+    getUserDashboardStats(session.user.id),
   ]);
 
-  const agentLimit = subscription?.agentLimit ?? 1;
+  const billedSeats = getBilledSeatCount(subscription);
   const used = agents.length;
-  const canCreate = used < agentLimit;
+  const canCreate = canCreateAgent(subscription, used);
   const isPro = subscription?.plan === "pro";
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-6 md:p-8">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Signed in as{" "}
-          {session.user.email ?? session.user.name ?? session.user.id}
-        </p>
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-6 md:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Usage and agent performance at a glance
+          </p>
+        </div>
+        <CreateAgentDialog
+          canCreate={canCreate}
+          billedSeats={billedSeats}
+          used={used}
+          isPro={isPro}
+        />
       </div>
 
-      <section className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-lg font-medium">Subscription</h2>
-        {subscription ? (
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">Plan</dt>
-              <dd className="font-medium capitalize">{subscription.plan}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className="font-medium capitalize">{subscription.status}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Agent seats</dt>
-              <dd className="font-medium">
-                {used} / {agentLimit} used
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Voice</dt>
-              <dd className="font-medium">
-                {subscription.voiceEnabled ? "Enabled" : "Chat only"}
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            No subscription record found yet.
-          </p>
-        )}
-        <div className="mt-6">
-          <Button asChild variant="secondary">
-            <Link href="/billing">Manage billing</Link>
-          </Button>
-        </div>
-      </section>
-
-      <CreateAgentForm
-        canCreate={canCreate}
-        limit={agentLimit}
-        used={used}
+      <DashboardCharts
+        stats={stats}
+        usedSeats={used}
+        billedSeats={billedSeats}
         isPro={isPro}
       />
 

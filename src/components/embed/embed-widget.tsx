@@ -1,12 +1,21 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Loader2, Mic, Send, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const embedChatSchema = z.object({
+  message: z.string().trim().min(1, "Message is required"),
+});
+
+type EmbedChatValues = z.infer<typeof embedChatSchema>;
 
 type LosonoUIMessage = UIMessage;
 
@@ -50,8 +59,12 @@ export function EmbedWidget({
 }: EmbedWidgetProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [mode, setMode] = useState<"chat" | "voice">("chat");
-  const [input, setInput] = useState("");
   const [voiceStatus, setVoiceStatus] = useState<string>("idle");
+  const form = useForm<EmbedChatValues>({
+    resolver: zodResolver(embedChatSchema),
+    defaultValues: { message: "" },
+  });
+  const message = form.watch("message");
   const conversationIdRef = useRef<string | undefined>(undefined);
   const visitorIdRef = useRef<string>("");
 
@@ -99,15 +112,13 @@ export function EmbedWidget({
     }
   }, [greeting, messages.length, setMessages]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text || isBusy) {
+  async function onSubmit(values: EmbedChatValues) {
+    if (isBusy) {
       return;
     }
 
-    setInput("");
-    await sendMessage({ text });
+    form.reset({ message: "" });
+    await sendMessage({ text: values.message });
   }
 
   async function startVoice() {
@@ -269,15 +280,16 @@ export function EmbedWidget({
           )}
 
           <form
-            onSubmit={handleSubmit}
+            onSubmit={form.handleSubmit(onSubmit)}
             className="flex items-end gap-2 border-t border-border p-4"
+            noValidate
           >
             <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
               placeholder="Type a message…"
               rows={2}
               className="min-h-11 flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              aria-invalid={!!form.formState.errors.message}
+              {...form.register("message")}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -287,7 +299,7 @@ export function EmbedWidget({
             />
             <Button
               type="submit"
-              disabled={isBusy || !input.trim()}
+              disabled={isBusy || !message.trim()}
               size="icon-lg"
               style={{ backgroundColor: primaryColor }}
             >

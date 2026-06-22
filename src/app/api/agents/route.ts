@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { canCreateAgent } from "@/lib/billing/agent-limits";
 import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import {
   countAgentsForUser,
@@ -60,14 +61,13 @@ export async function POST(request: Request) {
     userId,
     session?.user?.email,
   );
-  const agentLimit = subscription?.agentLimit ?? 1;
   const activeAgents = await countAgentsForUser(userId);
 
-  if (activeAgents >= agentLimit) {
+  if (!canCreateAgent(subscription, activeAgents)) {
     return Response.json(
       {
         error: "agent_limit_reached",
-        limit: agentLimit,
+        limit: subscription?.agentLimit ?? 1,
         used: activeAgents,
       },
       { status: 403 },

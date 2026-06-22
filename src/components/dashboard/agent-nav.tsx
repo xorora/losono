@@ -1,13 +1,6 @@
 import Link from "next/link";
+import { agentNavLinks } from "@/lib/agents/navigation";
 import { cn } from "@/lib/utils";
-
-const links = [
-  { href: (id: string) => `/agents/${id}`, label: "Settings" },
-  { href: (id: string) => `/agents/${id}/prompt`, label: "Prompt" },
-  { href: (id: string) => `/agents/${id}/context`, label: "Context" },
-  { href: (id: string) => `/agents/${id}/playground`, label: "Playground" },
-  { href: (id: string) => `/agents/${id}/deploy`, label: "Deploy" },
-] as const;
 
 type AgentNavProps = {
   agentId: string;
@@ -23,14 +16,9 @@ export function AgentNav({ agentId, agentName, current }: AgentNavProps) {
         <h1 className="text-3xl font-semibold tracking-tight">{agentName}</h1>
       </div>
       <nav className="flex flex-wrap gap-2">
-        {links.map((link) => {
+        {agentNavLinks.map((link) => {
           const href = link.href(agentId);
-          const isActive =
-            (current === "settings" && link.label === "Settings") ||
-            (current === "prompt" && link.label === "Prompt") ||
-            (current === "context" && link.label === "Context") ||
-            (current === "playground" && link.label === "Playground") ||
-            (current === "deploy" && link.label === "Deploy");
+          const isActive = current === link.segment;
 
           return (
             <Link

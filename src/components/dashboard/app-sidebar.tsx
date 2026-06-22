@@ -1,10 +1,18 @@
 "use client";
 
-import { Bot, CreditCard, LayoutDashboard } from "lucide-react";
+import {
+  FileText,
+  FlaskConical,
+  LayoutDashboard,
+  Rocket,
+  Settings,
+  Upload,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/logo";
+import { useAgentSelection } from "@/components/dashboard/agent-selection-provider";
 import { SidebarUserMenu } from "@/components/dashboard/sidebar-user-menu";
 import {
   Sidebar,
@@ -17,16 +25,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-
-type SidebarAgent = {
-  id: string;
-  name: string;
-};
+import {
+  agentNavLinks,
+  getAgentSegmentFromPath,
+} from "@/lib/agents/navigation";
 
 type SidebarUser = {
   name?: string | null;
@@ -35,53 +39,23 @@ type SidebarUser = {
 };
 
 type AppSidebarProps = {
-  agents: SidebarAgent[];
   user?: SidebarUser;
   logout?: ReactNode;
 };
 
-const agentLinks = [
-  {
-    href: (id: string) => `/agents/${id}`,
-    label: "Settings",
-    segment: "settings",
-  },
-  {
-    href: (id: string) => `/agents/${id}/prompt`,
-    label: "Prompt",
-    segment: "prompt",
-  },
-  {
-    href: (id: string) => `/agents/${id}/context`,
-    label: "Context",
-    segment: "context",
-  },
-  {
-    href: (id: string) => `/agents/${id}/playground`,
-    label: "Playground",
-    segment: "playground",
-  },
-  {
-    href: (id: string) => `/agents/${id}/deploy`,
-    label: "Deploy",
-    segment: "deploy",
-  },
-] as const;
+const agentLinkIcons = {
+  settings: Settings,
+  prompt: FileText,
+  context: Upload,
+  playground: FlaskConical,
+  deploy: Rocket,
+} as const;
 
-function getActiveAgentId(pathname: string) {
-  const match = pathname.match(/^\/agents\/([^/]+)/);
-  return match?.[1] ?? null;
-}
-
-function getAgentSegment(pathname: string) {
-  const match = pathname.match(/^\/agents\/[^/]+\/([^/]+)/);
-  return match?.[1] ?? "settings";
-}
-
-export function AppSidebar({ agents, user, logout }: AppSidebarProps) {
+export function AppSidebar({ user, logout }: AppSidebarProps) {
   const pathname = usePathname();
-  const activeAgentId = getActiveAgentId(pathname);
-  const activeSegment = getAgentSegment(pathname);
+  const { selectedAgentId } = useAgentSelection();
+  const activeSegment = getAgentSegmentFromPath(pathname);
+  const hasAgent = Boolean(selectedAgentId);
 
   return (
     <Sidebar collapsible="icon">
@@ -115,69 +89,47 @@ export function AppSidebar({ agents, user, logout }: AppSidebarProps) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === "/billing"}
-                  tooltip="Billing"
-                >
-                  <Link href="/billing">
-                    <CreditCard />
-                    <span>Billing</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarGroupLabel>Agent</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {agents.length === 0 ? (
-                <SidebarMenuItem>
-                  <SidebarMenuButton disabled>
-                    <Bot />
-                    <span>No agents yet</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ) : (
-                agents.map((agent) => {
-                  const isActiveAgent = activeAgentId === agent.id;
+              {agentNavLinks.map((link) => {
+                const Icon = agentLinkIcons[link.segment];
+                const href = selectedAgentId
+                  ? link.href(selectedAgentId)
+                  : "/dashboard";
+                const isActive =
+                  hasAgent &&
+                  pathname.startsWith("/agents/") &&
+                  activeSegment === link.segment;
 
-                  return (
-                    <SidebarMenuItem key={agent.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActiveAgent}
-                        tooltip={agent.name}
-                      >
-                        <Link href={`/agents/${agent.id}`}>
-                          <Bot />
-                          <span>{agent.name}</span>
+                return (
+                  <SidebarMenuItem key={link.segment}>
+                    <SidebarMenuButton
+                      asChild={hasAgent}
+                      isActive={isActive}
+                      tooltip={link.label}
+                      disabled={!hasAgent}
+                    >
+                      {hasAgent ? (
+                        <Link href={href}>
+                          <Icon />
+                          <span>{link.label}</span>
                         </Link>
-                      </SidebarMenuButton>
-                      {isActiveAgent ? (
-                        <SidebarMenuSub>
-                          {agentLinks.map((link) => (
-                            <SidebarMenuSubItem key={link.segment}>
-                              <SidebarMenuSubButton
-                                asChild
-                                isActive={activeSegment === link.segment}
-                              >
-                                <Link href={link.href(agent.id)}>
-                                  <span>{link.label}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      ) : null}
-                    </SidebarMenuItem>
-                  );
-                })
-              )}
+                      ) : (
+                        <>
+                          <Icon />
+                          <span>{link.label}</span>
+                        </>
+                      )}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -6,7 +6,7 @@ import {
   hasSessionCookie,
 } from "@/lib/auth/session-cookies";
 
-const protectedPrefixes = ["/dashboard", "/agents", "/billing"];
+const protectedPrefixes = ["/dashboard", "/agents", "/billing", "/profile"];
 
 function isProtectedPath(pathname: string): boolean {
   return protectedPrefixes.some(

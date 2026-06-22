@@ -1,8 +1,28 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+
+const agentSettingsSchema = z.object({
+  name: z.string().trim().min(1, "Agent name is required"),
+  voiceEnabled: z.boolean(),
+});
+
+type AgentSettingsFormValues = z.infer<typeof agentSettingsSchema>;
 
 type AgentSettingsFormProps = {
   agentId: string;
@@ -18,26 +38,23 @@ export function AgentSettingsForm({
   voiceAvailable,
 }: AgentSettingsFormProps) {
   const router = useRouter();
-  const [name, setName] = useState(initialName);
-  const [voiceEnabled, setVoiceEnabled] = useState(initialVoiceEnabled);
-  const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const form = useForm<AgentSettingsFormValues>({
+    resolver: zodResolver(agentSettingsSchema),
+    defaultValues: {
+      name: initialName,
+      voiceEnabled: initialVoiceEnabled,
+    },
+  });
 
-  async function handleSave(event: React.FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSaved(false);
-
+  async function onSubmit(values: AgentSettingsFormValues) {
     try {
       const response = await fetch(`/api/agents/${agentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          voiceEnabled,
+          name: values.name,
+          voiceEnabled: values.voiceEnabled,
         }),
       });
 
@@ -50,14 +67,12 @@ export function AgentSettingsForm({
         throw new Error(data.message ?? data.error ?? "Failed to save");
       }
 
-      setSaved(true);
+      toast.success("Settings saved");
       router.refresh();
     } catch (saveError) {
-      setError(
+      toast.error(
         saveError instanceof Error ? saveError.message : "Failed to save",
       );
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -71,7 +86,6 @@ export function AgentSettingsForm({
     }
 
     setDeleting(true);
-    setError(null);
 
     try {
       const response = await fetch(`/api/agents/${agentId}`, {
@@ -82,10 +96,11 @@ export function AgentSettingsForm({
         throw new Error("Failed to delete agent");
       }
 
+      toast.success("Agent deleted");
       router.push("/dashboard");
       router.refresh();
     } catch (deleteError) {
-      setError(
+      toast.error(
         deleteError instanceof Error
           ? deleteError.message
           : "Failed to delete agent",
@@ -95,7 +110,11 @@ export function AgentSettingsForm({
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-6">
+    <form
+      onSubmit={form.handleSubmit(onSubmit)}
+      className="space-y-6"
+      noValidate
+    >
       <section className="space-y-4 rounded-2xl border border-border bg-card p-6">
         <div className="space-y-1">
           <h2 className="text-lg font-medium">Agent details</h2>
@@ -104,42 +123,40 @@ export function AgentSettingsForm({
           </p>
         </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-muted-foreground">Name</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        </label>
+        <FieldGroup>
+          <Field data-invalid={!!form.formState.errors.name}>
+            <FieldLabel htmlFor="agent-name">Name</FieldLabel>
+            <Input
+              id="agent-name"
+              aria-invalid={!!form.formState.errors.name}
+              {...form.register("name")}
+            />
+            <FieldError errors={[form.formState.errors.name]} />
+          </Field>
 
-        <label className="flex items-start gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={voiceEnabled}
-            onChange={(event) => setVoiceEnabled(event.target.checked)}
-            disabled={!voiceAvailable}
-            className="mt-1 size-4 rounded border-input"
-          />
-          <span>
-            <span className="font-medium">Enable voice</span>
-            <span className="mt-1 block text-muted-foreground">
-              {voiceAvailable
-                ? "Allow voice mode in playground and deploy when configured."
-                : "Voice requires a Pro subscription."}
-            </span>
-          </span>
-        </label>
+          <Field orientation="horizontal">
+            <input
+              id="voice-enabled"
+              type="checkbox"
+              disabled={!voiceAvailable}
+              className="mt-1 size-4 rounded border-input"
+              {...form.register("voiceEnabled")}
+            />
+            <FieldContent>
+              <FieldLabel htmlFor="voice-enabled">Enable voice</FieldLabel>
+              <FieldDescription>
+                {voiceAvailable
+                  ? "Allow voice mode in playground and deploy when configured."
+                  : "Voice requires a Pro subscription."}
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
       </section>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={loading || deleting}>
-          {loading ? "Saving…" : "Save changes"}
-        </Button>
-        {saved && <span className="text-sm text-muted-foreground">Saved</span>}
-        {error && <span className="text-sm text-destructive">{error}</span>}
-      </div>
+      <Button type="submit" disabled={form.formState.isSubmitting || deleting}>
+        {form.formState.isSubmitting ? "Saving…" : "Save changes"}
+      </Button>
 
       <section className="space-y-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
         <h2 className="text-lg font-medium text-destructive">Danger zone</h2>
@@ -150,7 +167,7 @@ export function AgentSettingsForm({
         <Button
           type="button"
           variant="destructive"
-          disabled={loading || deleting}
+          disabled={form.formState.isSubmitting || deleting}
           onClick={handleDelete}
         >
           {deleting ? "Deleting…" : "Delete agent"}

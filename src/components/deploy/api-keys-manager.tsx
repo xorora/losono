@@ -1,9 +1,21 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Copy, KeyRound, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+
+const createApiKeySchema = z.object({
+  name: z.string().transform((value) => value.trim() || "Default key"),
+});
+
+type CreateApiKeyValues = z.infer<typeof createApiKeySchema>;
 
 type ApiKeySummary = {
   id: string;
@@ -25,20 +37,19 @@ export function ApiKeysManager({
 }: ApiKeysManagerProps) {
   const router = useRouter();
   const [keys, setKeys] = useState(initialKeys);
-  const [name, setName] = useState("");
   const [rawKey, setRawKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function createKey() {
-    setLoading(true);
-    setError(null);
+  const form = useForm<CreateApiKeyValues>({
+    resolver: zodResolver(createApiKeySchema),
+    defaultValues: { name: "" },
+  });
 
+  async function onSubmit(values: CreateApiKeyValues) {
     try {
       const response = await fetch(`/api/agents/${agentId}/api-keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() || "Default key" }),
+        body: JSON.stringify({ name: values.name }),
       });
 
       const data = (await response.json()) as {
@@ -54,33 +65,31 @@ export function ApiKeysManager({
       if (data.key && data.rawKey) {
         setKeys((current) => [data.key as ApiKeySummary, ...current]);
         setRawKey(data.rawKey);
-        setName("");
+        form.reset();
+        toast.success("API key created");
         router.refresh();
       }
     } catch (createError) {
-      setError(
+      toast.error(
         createError instanceof Error
           ? createError.message
           : "Failed to create API key",
       );
-    } finally {
-      setLoading(false);
     }
   }
 
   async function revokeKey(keyId: string) {
-    setError(null);
-
     const response = await fetch(`/api/agents/${agentId}/api-keys/${keyId}`, {
       method: "DELETE",
     });
 
     if (!response.ok) {
-      setError("Failed to revoke API key");
+      toast.error("Failed to revoke API key");
       return;
     }
 
     setKeys((current) => current.filter((key) => key.id !== keyId));
+    toast.success("API key revoked");
     router.refresh();
   }
 
@@ -90,6 +99,7 @@ export function ApiKeysManager({
     }
 
     await navigator.clipboard.writeText(rawKey);
+    toast.success("API key copied to clipboard");
   }
 
   return (
@@ -139,28 +149,33 @@ export function ApiKeysManager({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm">
-          <span className="text-muted-foreground">Key name</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex flex-wrap items-end gap-2"
+        noValidate
+      >
+        <Field
+          className="min-w-[200px] flex-1"
+          data-invalid={!!form.formState.errors.name}
+        >
+          <FieldLabel htmlFor="api-key-name">Key name</FieldLabel>
+          <Input
+            id="api-key-name"
             placeholder="Production website"
-            disabled={!published || loading}
-            className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            disabled={!published || form.formState.isSubmitting}
+            aria-invalid={!!form.formState.errors.name}
+            {...form.register("name")}
           />
-        </label>
+          <FieldError errors={[form.formState.errors.name]} />
+        </Field>
         <Button
-          type="button"
-          disabled={!published || loading}
-          onClick={createKey}
+          type="submit"
+          disabled={!published || form.formState.isSubmitting}
         >
           <KeyRound />
           Generate key
         </Button>
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      </form>
 
       <ul className="divide-y divide-border rounded-xl border border-border">
         {keys.length === 0 ? (

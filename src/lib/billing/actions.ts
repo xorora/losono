@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { auth } from "@/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
+import { ensureSeatQuantityOnExistingSubscription } from "@/lib/billing/update-seats";
 import { countAgentsForUser } from "@/lib/db/queries/agents";
 import {
   createBillingPortalSession,
@@ -34,6 +35,35 @@ async function startCheckout(formData: FormData) {
   );
 
   const appUrl = getAppUrl();
+
+  if (subscription?.stripeCustomerId) {
+    try {
+      const updated = await ensureSeatQuantityOnExistingSubscription({
+        userId,
+        stripeCustomerId: subscription.stripeCustomerId,
+        quantity,
+      });
+
+      if (updated && updated !== "none") {
+        redirect("/billing?checkout=success");
+      }
+    } catch (error) {
+      console.error("[billing] checkout seat update failed", error);
+      redirect("/billing?error=seat_update_failed");
+    }
+  }
+
+  if (
+    subscription?.plan === "pro" &&
+    subscription.stripeCustomerId &&
+    subscription.stripeSubscriptionId
+  ) {
+    const portal = await createBillingPortalSession({
+      stripeCustomerId: subscription.stripeCustomerId,
+      returnUrl: `${appUrl}/billing`,
+    });
+    redirect(portal.url);
+  }
 
   let checkout: Stripe.Checkout.Session;
   try {

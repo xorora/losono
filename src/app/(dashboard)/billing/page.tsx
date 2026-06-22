@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { auth } from "@/auth";
-import { Button } from "@/components/ui/button";
-import { openPortal, startCheckout } from "@/lib/billing/actions";
+import { BillingActions } from "@/components/billing/billing-actions";
+import { getBilledSeatCount } from "@/lib/billing/agent-limits";
 import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
 import { syncSubscriptionFromStripe } from "@/lib/billing/sync-subscription";
 import { countAgentsForUser } from "@/lib/db/queries/agents";
@@ -42,8 +42,10 @@ async function BillingContent({
     }
   }
   const isPro = subscription?.plan === "pro";
-  const agentLimit = subscription?.agentLimit ?? 1;
-  const suggestedSeats = Math.max(activeAgents, 1);
+  const billedSeats = getBilledSeatCount(subscription);
+  const hasStripeSubscription = Boolean(
+    subscription?.stripeCustomerId && subscription?.stripeSubscriptionId,
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-6 md:p-8">
@@ -51,7 +53,7 @@ async function BillingContent({
         <h1 className="text-3xl font-semibold tracking-tight">Billing</h1>
         <p className="text-muted-foreground">
           Free trial includes one chat-only agent and up to 3 context files. Pro
-          unlocks voice, unlimited context, and additional agent seats.
+          unlocks voice, unlimited agents, and per-seat billing.
         </p>
       </div>
 
@@ -86,9 +88,13 @@ async function BillingContent({
               <dd className="font-medium capitalize">{subscription.status}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Agent seats</dt>
+              <dt className="text-muted-foreground">
+                {isPro ? "Agents / billed seats" : "Agent seats"}
+              </dt>
               <dd className="font-medium">
-                {activeAgents} / {agentLimit} used
+                {isPro
+                  ? `${activeAgents} agents · ${billedSeats} billed seat${billedSeats === 1 ? "" : "s"}`
+                  : `${activeAgents} / ${billedSeats} used`}
               </dd>
             </div>
             <div>
@@ -104,37 +110,17 @@ async function BillingContent({
           </p>
         )}
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          {stripeReady && !isPro && (
-            <form action={startCheckout}>
-              <input type="hidden" name="quantity" value={suggestedSeats} />
-              <Button type="submit">Upgrade to Pro</Button>
-            </form>
-          )}
-
-          {stripeReady && isPro && subscription?.stripeCustomerId && (
-            <form action={openPortal}>
-              <Button type="submit" variant="outline">
-                Manage subscription
-              </Button>
-            </form>
-          )}
-
-          {stripeReady && isPro && !subscription?.stripeCustomerId && (
-            <form action={startCheckout}>
-              <input
-                type="hidden"
-                name="quantity"
-                value={Math.max(agentLimit, suggestedSeats)}
-              />
-              <Button type="submit" variant="outline">
-                Set up billing portal
-              </Button>
-            </form>
-          )}
-        </div>
-
-        {!stripeReady && (
+        {stripeReady ? (
+          <div className="mt-6">
+            <BillingActions
+              stripeReady={stripeReady}
+              isPro={isPro}
+              hasStripeSubscription={hasStripeSubscription}
+              agentCount={activeAgents}
+              billedSeats={billedSeats}
+            />
+          </div>
+        ) : (
           <p className="mt-4 text-sm text-muted-foreground">
             Configure STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and
             STRIPE_PRICE_AGENT_SEAT to enable checkout.
@@ -148,7 +134,7 @@ async function BillingContent({
           <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-muted-foreground">
             <li>Voice playground and deployed voice mode</li>
             <li>Unlimited context files per agent</li>
-            <li>Additional agent seats (quantity set at checkout)</li>
+            <li>Unlimited agents with per-seat billing</li>
             <li>Embed widget and API keys for production</li>
           </ul>
         </section>

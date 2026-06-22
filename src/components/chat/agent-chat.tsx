@@ -1,14 +1,25 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Loader2, Send } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { ChatMarkdown } from "@/components/chat/chat-markdown";
 import { Button } from "@/components/ui/button";
+import { FieldError } from "@/components/ui/field";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type LosonoUIMessage = UIMessage;
+
+const chatMessageSchema = z.object({
+  message: z.string().trim().min(1, "Message is required"),
+});
+
+type ChatMessageValues = z.infer<typeof chatMessageSchema>;
 
 type AgentChatProps = {
   agentId: string;
@@ -24,7 +35,11 @@ function getMessageText(message: LosonoUIMessage): string {
 
 export function AgentChat({ agentId, agentName }: AgentChatProps) {
   const conversationIdRef = useRef<string | undefined>(undefined);
-  const [input, setInput] = useState("");
+
+  const form = useForm<ChatMessageValues>({
+    resolver: zodResolver(chatMessageSchema),
+    defaultValues: { message: "" },
+  });
 
   const transport = useMemo(
     () =>
@@ -51,16 +66,15 @@ export function AgentChat({ agentId, agentName }: AgentChatProps) {
   });
 
   const isBusy = status === "submitted" || status === "streaming";
+  const message = form.watch("message");
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text || isBusy) {
+  async function onSubmit(values: ChatMessageValues) {
+    if (isBusy) {
       return;
     }
 
-    setInput("");
-    await sendMessage({ text });
+    form.reset({ message: "" });
+    await sendMessage({ text: values.message });
   }
 
   return (
@@ -79,17 +93,17 @@ export function AgentChat({ agentId, agentName }: AgentChatProps) {
             context.
           </div>
         ) : (
-          messages.map((message) => {
-            const text = getMessageText(message);
+          messages.map((msg) => {
+            const text = getMessageText(msg);
             if (!text) {
               return null;
             }
 
-            const isUser = message.role === "user";
+            const isUser = msg.role === "user";
 
             return (
               <div
-                key={message.id}
+                key={msg.id}
                 className={cn(
                   "max-w-[85%] rounded-2xl px-4 py-3",
                   isUser
@@ -122,23 +136,31 @@ export function AgentChat({ agentId, agentName }: AgentChatProps) {
       )}
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={form.handleSubmit(onSubmit)}
         className="flex shrink-0 items-end gap-2 border-t border-border p-4"
+        noValidate
       >
-        <textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Type a test message…"
-          rows={2}
-          className="min-h-11 flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-        />
-        <Button type="submit" disabled={isBusy || !input.trim()} size="icon-lg">
+        <div className="min-h-11 flex-1">
+          <Textarea
+            placeholder="Type a test message…"
+            rows={2}
+            className="min-h-11 resize-none"
+            aria-invalid={!!form.formState.errors.message}
+            {...form.register("message")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
+          <FieldError errors={[form.formState.errors.message]} />
+        </div>
+        <Button
+          type="submit"
+          disabled={isBusy || !message.trim()}
+          size="icon-lg"
+        >
           <Send />
           <span className="sr-only">Send message</span>
         </Button>

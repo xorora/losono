@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAgentSelection } from "@/components/dashboard/agent-selection-provider";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,16 +11,21 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import {
+  agentNavLinks,
+  getAgentIdFromPath,
+  getAgentSegmentFromPath,
+} from "@/lib/agents/navigation";
 
-const agentSectionLabels: Record<string, string> = {
-  settings: "Settings",
-  prompt: "Prompt",
-  context: "Context",
-  playground: "Playground",
-  deploy: "Deploy",
-};
+const agentSectionLabels = Object.fromEntries(
+  agentNavLinks.map((link) => [link.segment, link.label]),
+) as Record<string, string>;
 
-function getBreadcrumbs(pathname: string) {
+function getBreadcrumbs(
+  pathname: string,
+  agentName: string | null,
+  agentId: string | null,
+) {
   if (pathname === "/dashboard") {
     return [{ label: "Dashboard", href: null }];
   }
@@ -31,16 +37,26 @@ function getBreadcrumbs(pathname: string) {
     ];
   }
 
-  const agentMatch = pathname.match(/^\/agents\/([^/]+)(?:\/(.+))?$/);
-  if (agentMatch) {
-    const [, agentId, section] = agentMatch;
-    const sectionKey = section ?? "settings";
+  if (pathname === "/profile") {
+    return [
+      { label: "Dashboard", href: "/dashboard" },
+      { label: "Profile", href: null },
+    ];
+  }
+
+  const pathAgentId = getAgentIdFromPath(pathname);
+  if (pathAgentId) {
+    const sectionKey = getAgentSegmentFromPath(pathname);
     const sectionLabel =
       agentSectionLabels[sectionKey] ?? agentSectionLabels.settings;
+    const displayAgentName = agentName ?? "Agent";
 
     return [
       { label: "Dashboard", href: "/dashboard" },
-      { label: "Agent", href: `/agents/${agentId}` },
+      {
+        label: displayAgentName,
+        href: agentId ? `/agents/${agentId}` : `/agents/${pathAgentId}`,
+      },
       { label: sectionLabel, href: null },
     ];
   }
@@ -50,7 +66,12 @@ function getBreadcrumbs(pathname: string) {
 
 export function DashboardBreadcrumbs() {
   const pathname = usePathname();
-  const crumbs = getBreadcrumbs(pathname);
+  const { selectedAgent } = useAgentSelection();
+  const crumbs = getBreadcrumbs(
+    pathname,
+    selectedAgent?.name ?? null,
+    selectedAgent?.id ?? null,
+  );
 
   return (
     <Breadcrumb>

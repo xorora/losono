@@ -1,11 +1,9 @@
 import { type ReactNode, Suspense } from "react";
 import {
-  DashboardHeaderFallback,
-  DashboardHeaderSlot,
-  DashboardSidebarFallback,
-  DashboardSidebarSlot,
+  DashboardChrome,
+  DashboardChromeFallback,
 } from "@/components/dashboard/dashboard-chrome";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 export default function DashboardLayout({
   children,
@@ -14,15 +12,9 @@ export default function DashboardLayout({
 }>) {
   return (
     <SidebarProvider>
-      <Suspense fallback={<DashboardSidebarFallback />}>
-        <DashboardSidebarSlot />
+      <Suspense fallback={<DashboardChromeFallback />}>
+        <DashboardChrome>{children}</DashboardChrome>
       </Suspense>
-      <SidebarInset className="min-h-svh">
-        <Suspense fallback={<DashboardHeaderFallback />}>
-          <DashboardHeaderSlot />
-        </Suspense>
-        <div className="flex flex-1 flex-col">{children}</div>
-      </SidebarInset>
     </SidebarProvider>
   );
 }

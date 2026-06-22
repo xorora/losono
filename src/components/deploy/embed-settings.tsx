@@ -1,8 +1,36 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Copy } from "lucide-react";
-import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+const embedSettingsSchema = z.object({
+  greeting: z.string(),
+  position: z.enum(["bottom-right", "bottom-left"]),
+  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color"),
+  allowedOrigins: z.string(),
+  modes: z.enum(["chat", "chat+voice"]),
+});
+
+type EmbedSettingsValues = z.infer<typeof embedSettingsSchema>;
 
 type EmbedSettingsProps = {
   agentId: string;
@@ -30,21 +58,19 @@ export function EmbedSettings({
   const embedUrl = `${appUrl}/embed/${slug}`;
   const scriptSnippet = `<script src="${appUrl}/embed.js" data-agent="${slug}"></script>`;
 
-  const [greeting, setGreeting] = useState(initialGreeting);
-  const [position, setPosition] = useState(initialPosition);
-  const [primaryColor, setPrimaryColor] = useState(initialPrimaryColor);
-  const [allowedOrigins, setAllowedOrigins] = useState(initialAllowedOrigins);
-  const [modes, setModes] = useState(initialModes);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const form = useForm<EmbedSettingsValues>({
+    resolver: zodResolver(embedSettingsSchema),
+    defaultValues: {
+      greeting: initialGreeting,
+      position: initialPosition,
+      primaryColor: initialPrimaryColor,
+      allowedOrigins: initialAllowedOrigins,
+      modes: initialModes,
+    },
+  });
 
-  async function saveSettings() {
-    setSaving(true);
-    setSaved(false);
-    setError(null);
-
-    const origins = allowedOrigins
+  async function onSubmit(values: EmbedSettingsValues) {
+    const origins = values.allowedOrigins
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
@@ -57,10 +83,10 @@ export function EmbedSettings({
           settings: {
             allowedOrigins: origins,
             widgetTheme: {
-              greeting,
-              position,
-              primaryColor,
-              modes,
+              greeting: values.greeting,
+              position: values.position,
+              primaryColor: values.primaryColor,
+              modes: values.modes,
             },
           },
         }),
@@ -70,20 +96,19 @@ export function EmbedSettings({
         throw new Error("Failed to save embed settings");
       }
 
-      setSaved(true);
+      toast.success("Embed settings saved");
     } catch (saveError) {
-      setError(
+      toast.error(
         saveError instanceof Error
           ? saveError.message
           : "Failed to save embed settings",
       );
-    } finally {
-      setSaving(false);
     }
   }
 
-  async function copyText(text: string) {
+  async function copyText(text: string, label: string) {
     await navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
   }
 
   return (
@@ -101,116 +126,140 @@ export function EmbedSettings({
         </p>
       )}
 
-      <div className="grid gap-3">
-        <label className="space-y-1 text-sm">
-          <span className="text-muted-foreground">Hosted widget URL</span>
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="embed-url">Hosted widget URL</FieldLabel>
           <div className="flex gap-2">
-            <input
+            <Input
+              id="embed-url"
               readOnly
               value={embedUrl}
-              className="flex-1 rounded-xl border border-input bg-muted/40 px-3 py-2 text-sm"
+              className="flex-1"
             />
             <Button
               type="button"
               variant="outline"
               size="icon"
-              onClick={() => copyText(embedUrl)}
+              onClick={() => copyText(embedUrl, "Widget URL")}
             >
               <Copy />
             </Button>
           </div>
-        </label>
+        </Field>
 
-        <label className="space-y-1 text-sm">
-          <span className="text-muted-foreground">Script snippet</span>
+        <Field>
+          <FieldLabel htmlFor="script-snippet">Script snippet</FieldLabel>
           <div className="flex gap-2">
-            <textarea
+            <Textarea
+              id="script-snippet"
               readOnly
               rows={2}
               value={scriptSnippet}
-              className="flex-1 rounded-xl border border-input bg-muted/40 px-3 py-2 font-mono text-xs"
+              className="flex-1 font-mono text-xs"
             />
             <Button
               type="button"
               variant="outline"
               size="icon"
-              onClick={() => copyText(scriptSnippet)}
+              onClick={() => copyText(scriptSnippet, "Script snippet")}
             >
               <Copy />
             </Button>
           </div>
-        </label>
-      </div>
+        </Field>
+      </FieldGroup>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="text-muted-foreground">Greeting</span>
-          <input
-            value={greeting}
-            onChange={(event) => setGreeting(event.target.value)}
-            className="w-full rounded-xl border border-input bg-background px-3 py-2"
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4"
+        noValidate
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field data-invalid={!!form.formState.errors.greeting}>
+            <FieldLabel htmlFor="greeting">Greeting</FieldLabel>
+            <Input
+              id="greeting"
+              aria-invalid={!!form.formState.errors.greeting}
+              {...form.register("greeting")}
+            />
+            <FieldError errors={[form.formState.errors.greeting]} />
+          </Field>
+
+          <Field data-invalid={!!form.formState.errors.primaryColor}>
+            <FieldLabel htmlFor="primary-color">Primary color</FieldLabel>
+            <Input
+              id="primary-color"
+              type="color"
+              className="h-9 px-1"
+              aria-invalid={!!form.formState.errors.primaryColor}
+              {...form.register("primaryColor")}
+            />
+            <FieldError errors={[form.formState.errors.primaryColor]} />
+          </Field>
+
+          <Field data-invalid={!!form.formState.errors.position}>
+            <FieldLabel>Launcher position</FieldLabel>
+            <Controller
+              name="position"
+              control={form.control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bottom-right">Bottom right</SelectItem>
+                    <SelectItem value="bottom-left">Bottom left</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <FieldError errors={[form.formState.errors.position]} />
+          </Field>
+
+          <Field data-invalid={!!form.formState.errors.modes}>
+            <FieldLabel>Modes</FieldLabel>
+            <Controller
+              name="modes"
+              control={form.control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chat">Chat only</SelectItem>
+                    <SelectItem value="chat+voice">Chat + voice</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <FieldError errors={[form.formState.errors.modes]} />
+          </Field>
+        </div>
+
+        <Field data-invalid={!!form.formState.errors.allowedOrigins}>
+          <FieldLabel htmlFor="allowed-origins">
+            Allowed origins (one per line, empty = allow all)
+          </FieldLabel>
+          <Textarea
+            id="allowed-origins"
+            rows={3}
+            placeholder={"https://example.com\nhttps://app.example.com"}
+            aria-invalid={!!form.formState.errors.allowedOrigins}
+            {...form.register("allowedOrigins")}
           />
-        </label>
+          <FieldError errors={[form.formState.errors.allowedOrigins]} />
+        </Field>
 
-        <label className="space-y-1 text-sm">
-          <span className="text-muted-foreground">Primary color</span>
-          <input
-            type="color"
-            value={primaryColor}
-            onChange={(event) => setPrimaryColor(event.target.value)}
-            className="h-10 w-full rounded-xl border border-input bg-background px-1"
-          />
-        </label>
-
-        <label className="space-y-1 text-sm">
-          <span className="text-muted-foreground">Launcher position</span>
-          <select
-            value={position}
-            onChange={(event) =>
-              setPosition(event.target.value as "bottom-right" | "bottom-left")
-            }
-            className="w-full rounded-xl border border-input bg-background px-3 py-2"
-          >
-            <option value="bottom-right">Bottom right</option>
-            <option value="bottom-left">Bottom left</option>
-          </select>
-        </label>
-
-        <label className="space-y-1 text-sm">
-          <span className="text-muted-foreground">Modes</span>
-          <select
-            value={modes}
-            onChange={(event) =>
-              setModes(event.target.value as "chat" | "chat+voice")
-            }
-            className="w-full rounded-xl border border-input bg-background px-3 py-2"
-          >
-            <option value="chat">Chat only</option>
-            <option value="chat+voice">Chat + voice</option>
-          </select>
-        </label>
-      </div>
-
-      <label className="block space-y-1 text-sm">
-        <span className="text-muted-foreground">
-          Allowed origins (one per line, empty = allow all)
-        </span>
-        <textarea
-          rows={3}
-          value={allowedOrigins}
-          onChange={(event) => setAllowedOrigins(event.target.value)}
-          placeholder={"https://example.com\nhttps://app.example.com"}
-          className="w-full rounded-xl border border-input bg-background px-3 py-2"
-        />
-      </label>
-
-      <div className="flex items-center gap-3">
-        <Button type="button" onClick={saveSettings} disabled={saving}>
-          {saving ? "Saving…" : "Save embed settings"}
+        <Button
+          type="submit"
+          disabled={form.formState.isSubmitting}
+          className="mt-2.5"
+        >
+          {form.formState.isSubmitting ? "Saving…" : "Save embed settings"}
         </Button>
-        {saved && <span className="text-sm text-muted-foreground">Saved</span>}
-        {error && <span className="text-sm text-destructive">{error}</span>}
-      </div>
+      </form>
     </section>
   );
 }

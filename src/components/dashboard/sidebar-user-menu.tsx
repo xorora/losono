@@ -1,11 +1,13 @@
 "use client";
 
-import { ChevronsUpDownIcon } from "lucide-react";
+import { ChevronsUpDownIcon, CreditCard, User } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -101,6 +103,19 @@ export function SidebarUserMenu({ user, logout }: SidebarUserMenuProps) {
                 </div>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/profile">
+                <User />
+                Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/billing">
+                <CreditCard />
+                Billing
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             {logout}
           </DropdownMenuContent>

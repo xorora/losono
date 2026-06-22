@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { getAppUrl } from "@/lib/app-url";
 import { ensureFreeSubscription } from "@/lib/billing/subscriptions";
+import { ensureSeatQuantityOnExistingSubscription } from "@/lib/billing/update-seats";
 import { countAgentsForUser } from "@/lib/db/queries/agents";
 import {
   createBillingPortalSession,
@@ -47,12 +48,52 @@ export async function POST(request: Request) {
     subscription.stripeCustomerId &&
     subscription.stripeSubscriptionId
   ) {
+    try {
+      const updated = await ensureSeatQuantityOnExistingSubscription({
+        userId,
+        stripeCustomerId: subscription.stripeCustomerId,
+        quantity,
+      });
+
+      if (updated && updated !== "none") {
+        return Response.json({
+          kind: "updated",
+          quantity: updated.agentLimit,
+        });
+      }
+    } catch (updateError) {
+      console.error("[billing] pro seat update failed", updateError);
+      return Response.json({ error: "seat_update_failed" }, { status: 500 });
+    }
+
     const portalSession = await createBillingPortalSession({
       stripeCustomerId: subscription.stripeCustomerId,
       returnUrl: `${appUrl}/billing`,
     });
 
     return Response.json({ url: portalSession.url, kind: "portal" });
+  }
+
+  if (subscription.stripeCustomerId) {
+    try {
+      const updated = await ensureSeatQuantityOnExistingSubscription({
+        userId,
+        stripeCustomerId: subscription.stripeCustomerId,
+        quantity,
+      });
+
+      if (updated && updated !== "none") {
+        return Response.json({
+          kind: "updated",
+          quantity: updated.agentLimit,
+        });
+      }
+    } catch (updateError) {
+      console.error(
+        "[billing] existing subscription seat update failed",
+        updateError,
+      );
+    }
   }
 
   const checkoutSession = await createCheckoutSession({

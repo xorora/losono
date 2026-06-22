@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AgentStatus } from "@/lib/db/schema";
 
@@ -18,11 +19,9 @@ export function PublishActions({
 }: PublishActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function togglePublish() {
     setLoading(true);
-    setError(null);
 
     try {
       const response = await fetch(`/api/agents/${agentId}/publish`, {
@@ -34,9 +33,12 @@ export function PublishActions({
         throw new Error(data.message ?? "Failed to update publish status");
       }
 
+      toast.success(
+        status === "published" ? "Agent unpublished" : "Agent published",
+      );
       router.refresh();
     } catch (publishError) {
-      setError(
+      toast.error(
         publishError instanceof Error
           ? publishError.message
           : "Failed to update publish status",
@@ -64,7 +66,6 @@ export function PublishActions({
             ? "Unpublish"
             : "Publish agent"}
       </Button>
-      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

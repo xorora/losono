@@ -35,7 +35,7 @@ const plans = [
     features: [
       "Voice playground & deployed voice",
       "Unlimited context files per agent",
-      "Additional agent seats",
+      "Unlimited agents (per-seat billing)",
       "Embed widget & API keys",
       "Conversation logs & usage tracking",
       "Production publish mode",

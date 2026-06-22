@@ -3,6 +3,7 @@
 import { Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 type ContextSourceSummary = {
@@ -50,7 +51,6 @@ export function ContextManager({
   const [sources, setSources] = useState(initialSources);
   const [limits, setLimits] = useState(initialLimits);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const refreshLimits = useCallback(async () => {
     const response = await fetch(`/api/agents/${agentId}/context/limits`);
@@ -74,16 +74,14 @@ export function ContextManager({
       return;
     }
 
-    setError(null);
-
     if (file.size === 0) {
-      setError("File is empty.");
+      toast.error("File is empty.");
       event.target.value = "";
       return;
     }
 
     if (file.size > limits.maxBytes) {
-      setError(
+      toast.error(
         `File is too large (${formatBytes(file.size)}). Max ${formatBytes(limits.maxBytes)} per file.`,
       );
       event.target.value = "";
@@ -91,7 +89,7 @@ export function ContextManager({
     }
 
     if (atFileLimit) {
-      setError(
+      toast.error(
         isPro
           ? "Unexpected file limit reached."
           : `Free plan allows ${limits.limit} context files. Delete one to upload another, or upgrade to Pro.`,
@@ -153,9 +151,10 @@ export function ContextManager({
       }
 
       await refreshLimits();
+      toast.success("File uploaded");
       router.refresh();
     } catch (uploadError) {
-      setError(
+      toast.error(
         uploadError instanceof Error ? uploadError.message : "Upload failed",
       );
     } finally {
@@ -165,19 +164,18 @@ export function ContextManager({
   }
 
   async function handleDelete(sourceId: string) {
-    setError(null);
-
     const response = await fetch(`/api/agents/${agentId}/context/${sourceId}`, {
       method: "DELETE",
     });
 
     if (!response.ok) {
-      setError("Failed to delete file");
+      toast.error("Failed to delete file");
       return;
     }
 
     setSources((current) => current.filter((source) => source.id !== sourceId));
     await refreshLimits();
+    toast.success("File deleted");
     router.refresh();
   }
 
@@ -232,8 +230,6 @@ export function ContextManager({
           </span>
         )}
       </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ul className="divide-y divide-border rounded-xl border border-border">
         {sources.length === 0 ? (
