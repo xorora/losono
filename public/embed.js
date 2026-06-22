@@ -24,23 +24,66 @@
   }
 
   var position = script.getAttribute("data-position") || "bottom-right";
+  var FAB_SIZE = 56;
+  var INSET = 20;
+  var GAP = 12;
+  var PANEL_WIDTH = 400;
+  var PANEL_HEIGHT = 640;
 
   var iframe = document.createElement("iframe");
   iframe.src = `${origin}/embed/${encodeURIComponent(slug)}?position=${encodeURIComponent(position)}`;
   iframe.title = "Losono agent";
   iframe.allow = "microphone";
   iframe.setAttribute("allowtransparency", "true");
-  iframe.style.cssText =
-    "position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent;background-color:transparent;color-scheme:normal;pointer-events:none;z-index:2147483646;";
+  iframe.style.position = "fixed";
+  iframe.style.bottom = `${INSET}px`;
+  iframe.style.border = "0";
+  iframe.style.background = "transparent";
+  iframe.style.backgroundColor = "transparent";
+  iframe.style.colorScheme = "normal";
+  iframe.style.overflow = "hidden";
+  iframe.style.zIndex = "2147483646";
+  iframe.style.transition =
+    "width 300ms cubic-bezier(0.32, 0.72, 0, 1), height 300ms cubic-bezier(0.32, 0.72, 0, 1)";
+
+  if (position === "bottom-left") {
+    iframe.style.left = `${INSET}px`;
+    iframe.style.right = "auto";
+  } else {
+    iframe.style.right = `${INSET}px`;
+    iframe.style.left = "auto";
+  }
 
   var overlay = null;
   var isOpen = false;
+
+  function collapsedSize() {
+    return { width: FAB_SIZE, height: FAB_SIZE };
+  }
+
+  function expandedSize() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var panelW = Math.min(PANEL_WIDTH, vw - INSET * 2);
+    var panelH = Math.min(PANEL_HEIGHT, Math.floor(vh * 0.8));
+    return {
+      width: panelW,
+      height: panelH + GAP + FAB_SIZE,
+    };
+  }
+
+  function applySize(open) {
+    var size = open ? expandedSize() : collapsedSize();
+    iframe.style.width = `${size.width}px`;
+    iframe.style.height = `${size.height}px`;
+  }
 
   function setOpen(open) {
     if (open === isOpen) {
       return;
     }
     isOpen = open;
+    applySize(open);
 
     if (open) {
       overlay = document.createElement("div");
@@ -80,5 +123,12 @@
     }
   });
 
+  window.addEventListener("resize", () => {
+    if (isOpen) {
+      applySize(true);
+    }
+  });
+
+  applySize(false);
   document.body.appendChild(iframe);
 })();

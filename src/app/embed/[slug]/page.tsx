@@ -12,8 +12,8 @@ type EmbedPageProps = {
 
 function EmbedFallback() {
   return (
-    <div className="pointer-events-none fixed inset-0 bg-transparent">
-      <div className="fixed right-5 bottom-5 flex size-14 items-center justify-center">
+    <div className="relative size-14 bg-transparent">
+      <div className="flex size-full items-center justify-center">
         <div className="size-10 animate-pulse rounded-full bg-muted/50" />
       </div>
     </div>
