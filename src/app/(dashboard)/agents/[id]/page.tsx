@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { AgentSettingsForm } from "@/components/dashboard/agent-settings-form";
 import { getSubscriptionWithStripeSync } from "@/lib/billing/sync-subscription";
 import { getAgentForUser } from "@/lib/db/queries/agents";
+import { DEFAULT_VOICE_GENDER } from "@/lib/gemini/voice-config";
 
 type AgentSettingsPageProps = {
   params: Promise<{ id: string }>;
@@ -49,6 +50,7 @@ async function SettingsContent({ params }: AgentSettingsPageProps) {
         agentId={agent.id}
         initialName={agent.name}
         initialVoiceEnabled={agent.voiceEnabled}
+        initialVoiceGender={agent.settings.voiceGender ?? DEFAULT_VOICE_GENDER}
         voiceAvailable={voiceAvailable}
       />
     </div>

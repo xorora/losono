@@ -11,6 +11,7 @@ import { ChatMarkdown } from "@/components/chat/chat-markdown";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
+import { getMessageText } from "@/lib/chat/message-text";
 import { cn } from "@/lib/utils";
 
 type LosonoUIMessage = UIMessage;
@@ -25,13 +26,6 @@ type AgentChatProps = {
   agentId: string;
   agentName: string;
 };
-
-function getMessageText(message: LosonoUIMessage): string {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-}
 
 export function AgentChat({ agentId, agentName }: AgentChatProps) {
   const conversationIdRef = useRef<string | undefined>(undefined);

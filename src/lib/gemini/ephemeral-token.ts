@@ -1,10 +1,12 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { env } from "@/lib/env";
 import { getVoiceModelId } from "@/lib/gemini/voice";
+import { buildSpeechConfig } from "@/lib/gemini/voice-config";
 
 type CreateEphemeralTokenInput = {
   systemInstruction: string;
   temperature?: number;
+  voiceGender?: string | null;
 };
 
 export async function createEphemeralVoiceToken(
@@ -33,6 +35,7 @@ export async function createEphemeralVoiceToken(
         config: {
           sessionResumption: {},
           responseModalities: [Modality.AUDIO],
+          speechConfig: buildSpeechConfig(input.voiceGender),
           systemInstruction: input.systemInstruction,
           inputAudioTranscription: {},
           outputAudioTranscription: {},

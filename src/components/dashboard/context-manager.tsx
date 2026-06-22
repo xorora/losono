@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type ContextSourceSummary = {
   id: string;
@@ -51,6 +52,10 @@ export function ContextManager({
   const [sources, setSources] = useState(initialSources);
   const [limits, setLimits] = useState(initialLimits);
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ContextSourceSummary | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
 
   const refreshLimits = useCallback(async () => {
     const response = await fetch(`/api/agents/${agentId}/context/limits`);
@@ -163,20 +168,36 @@ export function ContextManager({
     }
   }
 
-  async function handleDelete(sourceId: string) {
-    const response = await fetch(`/api/agents/${agentId}/context/${sourceId}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
-      toast.error("Failed to delete file");
+  async function handleDelete() {
+    if (!deleteTarget) {
       return;
     }
 
-    setSources((current) => current.filter((source) => source.id !== sourceId));
-    await refreshLimits();
-    toast.success("File deleted");
-    router.refresh();
+    setDeleting(true);
+
+    try {
+      const response = await fetch(
+        `/api/agents/${agentId}/context/${deleteTarget.id}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (!response.ok) {
+        toast.error("Failed to delete file");
+        return;
+      }
+
+      setSources((current) =>
+        current.filter((source) => source.id !== deleteTarget.id),
+      );
+      await refreshLimits();
+      toast.success("File deleted");
+      router.refresh();
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -255,7 +276,7 @@ export function ContextManager({
                 type="button"
                 size="sm"
                 variant="destructive"
-                onClick={() => handleDelete(source.id)}
+                onClick={() => setDeleteTarget(source)}
               >
                 <Trash2 />
                 Delete
@@ -264,6 +285,24 @@ export function ContextManager({
           ))
         )}
       </ul>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete context file?"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.filename}" will be removed from this agent's context. This cannot be undone.`
+            : ""
+        }
+        confirmLabel={deleting ? "Deleting…" : "Delete file"}
+        onConfirm={handleDelete}
+        loading={deleting}
+      />
     </section>
   );
 }

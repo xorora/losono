@@ -8,6 +8,8 @@ export const DEFAULT_WIDGET_THEME = {
   assistantBubbleColor: "#f1f5f9",
   sendButtonColor: "#2563eb",
   sendButtonIconColor: "#ffffff",
+  windowBorderColor: "#e2e8f0",
+  launcherBorderColor: "#e2e8f0",
   logoUrl: "/logo-mark.svg",
 } as const;
 
@@ -24,6 +26,8 @@ export type WidgetTheme = {
   assistantBubbleColor?: string;
   sendButtonColor?: string;
   sendButtonIconColor?: string;
+  windowBorderColor?: string;
+  launcherBorderColor?: string;
   logoUrl?: string;
 };
 
@@ -38,6 +42,8 @@ export type ResolvedWidgetTheme = {
   assistantBubbleColor: string;
   sendButtonColor: string;
   sendButtonIconColor: string;
+  windowBorderColor: string;
+  launcherBorderColor: string;
   logoUrl: string;
 };
 
@@ -50,6 +56,8 @@ export type WidgetAppearance = Pick<
   | "assistantBubbleColor"
   | "sendButtonColor"
   | "sendButtonIconColor"
+  | "windowBorderColor"
+  | "launcherBorderColor"
   | "logoUrl"
 >;
 
@@ -94,6 +102,12 @@ export function resolveWidgetTheme(
     sendButtonIconColor: isHexColor(theme.sendButtonIconColor)
       ? theme.sendButtonIconColor
       : DEFAULT_WIDGET_THEME.sendButtonIconColor,
+    windowBorderColor: isHexColor(theme.windowBorderColor)
+      ? theme.windowBorderColor
+      : DEFAULT_WIDGET_THEME.windowBorderColor,
+    launcherBorderColor: isHexColor(theme.launcherBorderColor)
+      ? theme.launcherBorderColor
+      : DEFAULT_WIDGET_THEME.launcherBorderColor,
     logoUrl:
       typeof theme.logoUrl === "string" && theme.logoUrl.length > 0
         ? theme.logoUrl
@@ -112,7 +126,9 @@ export function widgetThemeStyle(appearance: WidgetAppearance): CSSProperties {
     "--widget-assistant-text": appearance.assistantFontColor,
     "--widget-send-bg": appearance.sendButtonColor,
     "--widget-send-icon": appearance.sendButtonIconColor,
-    "--widget-border": `color-mix(in srgb, ${appearance.assistantFontColor} 18%, transparent)`,
+    "--widget-window-border": appearance.windowBorderColor,
+    "--widget-launcher-border": appearance.launcherBorderColor,
+    "--widget-border": appearance.windowBorderColor,
     "--widget-input-border": `color-mix(in srgb, ${appearance.assistantFontColor} 28%, transparent)`,
     "--widget-muted-text": `color-mix(in srgb, ${appearance.assistantFontColor} 55%, transparent)`,
   } as CSSProperties;

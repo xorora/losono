@@ -1,3 +1,5 @@
+import { buildSpeechConfig } from "@/lib/gemini/voice-config";
+
 /** Client ↔ Losono voice proxy protocol (not Gemini wire format). */
 
 export type VoiceClientMessage =
@@ -98,12 +100,14 @@ export function buildGeminiSetupMessage(input: {
   model: string;
   systemInstruction: string;
   temperature?: number;
+  voiceGender?: string | null;
 }) {
   return {
     setup: {
       model: input.model,
       generationConfig: {
         responseModalities: ["AUDIO"],
+        speechConfig: buildSpeechConfig(input.voiceGender),
         ...(typeof input.temperature === "number"
           ? { temperature: input.temperature }
           : {}),

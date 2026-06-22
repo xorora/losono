@@ -3,10 +3,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Field,
   FieldContent,
@@ -16,10 +17,19 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { VoiceGender } from "@/lib/gemini/voice-config";
 
 const agentSettingsSchema = z.object({
   name: z.string().trim().min(1, "Agent name is required"),
   voiceEnabled: z.boolean(),
+  voiceGender: z.enum(["male", "female"]),
 });
 
 type AgentSettingsFormValues = z.infer<typeof agentSettingsSchema>;
@@ -28,6 +38,7 @@ type AgentSettingsFormProps = {
   agentId: string;
   initialName: string;
   initialVoiceEnabled: boolean;
+  initialVoiceGender: VoiceGender;
   voiceAvailable: boolean;
 };
 
@@ -35,36 +46,62 @@ export function AgentSettingsForm({
   agentId,
   initialName,
   initialVoiceEnabled,
+  initialVoiceGender,
   voiceAvailable,
 }: AgentSettingsFormProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const form = useForm<AgentSettingsFormValues>({
     resolver: zodResolver(agentSettingsSchema),
     defaultValues: {
       name: initialName,
       voiceEnabled: initialVoiceEnabled,
+      voiceGender: initialVoiceGender,
     },
   });
 
   async function onSubmit(values: AgentSettingsFormValues) {
     try {
-      const response = await fetch(`/api/agents/${agentId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: values.name,
-          voiceEnabled: values.voiceEnabled,
+      const [agentResponse, settingsResponse] = await Promise.all([
+        fetch(`/api/agents/${agentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: values.name,
+            voiceEnabled: values.voiceEnabled,
+          }),
         }),
-      });
+        fetch(`/api/agents/${agentId}/settings`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            settings: {
+              voiceGender: values.voiceGender,
+            },
+          }),
+        }),
+      ]);
 
-      const data = (await response.json()) as {
+      const agentData = (await agentResponse.json()) as {
+        error?: string;
+        message?: string;
+      };
+      const settingsData = (await settingsResponse.json()) as {
         error?: string;
         message?: string;
       };
 
-      if (!response.ok) {
-        throw new Error(data.message ?? data.error ?? "Failed to save");
+      if (!agentResponse.ok) {
+        throw new Error(
+          agentData.message ?? agentData.error ?? "Failed to save agent",
+        );
+      }
+
+      if (!settingsResponse.ok) {
+        throw new Error(
+          settingsData.error ?? settingsData.message ?? "Failed to save voice",
+        );
       }
 
       toast.success("Settings saved");
@@ -77,14 +114,6 @@ export function AgentSettingsForm({
   }
 
   async function handleDelete() {
-    if (
-      !window.confirm(
-        "Delete this agent and all its context, conversations, and API keys? This cannot be undone.",
-      )
-    ) {
-      return;
-    }
-
     setDeleting(true);
 
     try {
@@ -151,6 +180,31 @@ export function AgentSettingsForm({
               </FieldDescription>
             </FieldContent>
           </Field>
+
+          {voiceAvailable ? (
+            <Field data-invalid={!!form.formState.errors.voiceGender}>
+              <FieldLabel htmlFor="voice-gender">Voice gender</FieldLabel>
+              <Controller
+                control={form.control}
+                name="voiceGender"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="voice-gender" className="w-full">
+                      <SelectValue placeholder="Select voice gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldDescription>
+                Choose how the agent sounds in voice mode.
+              </FieldDescription>
+              <FieldError errors={[form.formState.errors.voiceGender]} />
+            </Field>
+          ) : null}
         </FieldGroup>
       </section>
 
@@ -168,11 +222,21 @@ export function AgentSettingsForm({
           type="button"
           variant="destructive"
           disabled={form.formState.isSubmitting || deleting}
-          onClick={handleDelete}
+          onClick={() => setDeleteDialogOpen(true)}
         >
-          {deleting ? "Deleting…" : "Delete agent"}
+          Delete agent
         </Button>
       </section>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete agent?"
+        description="This will permanently delete this agent and all its context, conversations, and API keys. This cannot be undone."
+        confirmLabel={deleting ? "Deleting…" : "Delete agent"}
+        onConfirm={handleDelete}
+        loading={deleting}
+      />
     </form>
   );
 }

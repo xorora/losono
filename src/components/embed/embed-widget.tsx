@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { WidgetLogo } from "@/components/embed/widget-logo";
 import { AgentVoice } from "@/components/voice/agent-voice";
+import { getMessageText } from "@/lib/chat/message-text";
 import { cn } from "@/lib/utils";
 import type { WidgetAppearance } from "@/lib/widget-theme";
 import { widgetThemeStyle } from "@/lib/widget-theme";
@@ -81,13 +82,6 @@ function saveChatSession(
   } catch {
     // Ignore quota or serialization errors.
   }
-}
-
-function getMessageText(message: LosonoUIMessage): string {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("");
 }
 
 export function EmbedWidget({
@@ -271,7 +265,7 @@ export function EmbedWidget({
       type="button"
       onClick={() => setOpen((prev) => !prev)}
       className={cn(
-        "absolute bottom-0 flex size-14 shrink-0 items-center justify-center rounded-full shadow-md ring-1 ring-[var(--widget-border)]",
+        "absolute bottom-0 flex size-14 shrink-0 items-center justify-center rounded-full shadow-md ring-1 ring-(--widget-launcher-border)",
         anchorEdge,
       )}
       style={{
@@ -300,7 +294,7 @@ export function EmbedWidget({
         "flex min-h-0 flex-col",
         compact
           ? cn(
-              "absolute bottom-[4.25rem] h-[min(640px,80vh)] w-[min(400px,calc(100vw-2rem))] origin-bottom-right overflow-hidden rounded-2xl border border-[var(--widget-border)] shadow-xl transition-[opacity,transform] duration-300 ease-out",
+              "absolute bottom-[4.25rem] h-[min(640px,80vh)] w-[min(400px,calc(100vw-2rem))] origin-bottom-right overflow-hidden rounded-2xl border border-(--widget-window-border) shadow-xl transition-[opacity,transform] duration-300 ease-out",
               anchorEdge,
               position === "bottom-left" && "origin-bottom-left",
               open
@@ -337,7 +331,7 @@ export function EmbedWidget({
 
       {voiceEnabled && (
         <div
-          className="flex shrink-0 gap-2 border-b border-[var(--widget-border)] px-4 py-2"
+          className="flex shrink-0 gap-2 border-b border-(--widget-border) px-4 py-2"
           style={{ backgroundColor: appearance.backgroundColor }}
         >
           <button
@@ -444,14 +438,14 @@ export function EmbedWidget({
 
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex shrink-0 items-end gap-2 border-t border-[var(--widget-border)] p-4"
+            className="flex shrink-0 items-end gap-2 border-t border-(--widget-border) p-4"
             style={{ backgroundColor: appearance.backgroundColor }}
             noValidate
           >
             <textarea
               placeholder="Type a message…"
               rows={2}
-              className="min-h-11 flex-1 resize-none rounded-xl border border-[var(--widget-input-border)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--widget-user-bubble)]/30"
+              className="min-h-11 flex-1 resize-none rounded-xl border border-(--widget-input-border) px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-(--widget-user-bubble)/30"
               style={{
                 backgroundColor: appearance.backgroundColor,
                 color: appearance.assistantFontColor,

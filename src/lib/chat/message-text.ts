@@ -6,7 +6,6 @@ export function getMessageText(message: UIMessage | undefined): string {
   }
 
   return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("");
 }

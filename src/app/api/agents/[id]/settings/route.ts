@@ -34,6 +34,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return Response.json({ error: "settings_required" }, { status: 400 });
   }
 
+  if (
+    body.settings.voiceGender !== undefined &&
+    body.settings.voiceGender !== "male" &&
+    body.settings.voiceGender !== "female"
+  ) {
+    return Response.json({ error: "invalid_voice_gender" }, { status: 400 });
+  }
+
   const updated = await updateAgentSettings(agentId, userId, {
     ...agent.settings,
     ...body.settings,

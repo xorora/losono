@@ -53,6 +53,8 @@ async function EmbedContent({ params, searchParams }: EmbedPageProps) {
         assistantBubbleColor: theme.assistantBubbleColor,
         sendButtonColor: theme.sendButtonColor,
         sendButtonIconColor: theme.sendButtonIconColor,
+        windowBorderColor: theme.windowBorderColor,
+        launcherBorderColor: theme.launcherBorderColor,
         logoUrl: theme.logoUrl,
       }}
       voiceEnabled={theme.modes === "chat+voice" && voiceAccess.allowed}

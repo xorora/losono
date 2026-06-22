@@ -52,6 +52,7 @@ export async function createVoiceSession(input: {
   const accessToken = await createEphemeralVoiceToken({
     systemInstruction,
     temperature: agent.settings.temperature,
+    voiceGender: agent.settings.voiceGender,
   });
 
   return {

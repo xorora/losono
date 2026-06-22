@@ -6,9 +6,11 @@ Multi-agent voice and chat platform. Build AI agents that speak and listen, grou
 
 - **Streaming chat** — AI SDK streaming with per-agent system prompts and retrieved context
 - **Live voice** — Gemini Live over WebSocket for playground testing and production deployment
-- **Document RAG** — PDF, DOCX, markdown, images, audio, and video chunked and indexed with pgvector on Neon
+- **Document RAG** — PDF, DOCX, markdown, CSV, HTML, JSON, images, audio, and video chunked and indexed with pgvector on Neon
 - **Multi-agent** — Separate agents for support, sales, onboarding, each with its own prompt and knowledge base
 - **Developer-first deploy** — REST chat API, WebSocket voice, API keys (`losono_sk_…`), and embed widget
+- **Customizable embed** — Branded widget with greeting, colors, logo, launcher position, chat-only or chat+voice modes, and allowed-origin restrictions
+- **Voice settings** — Per-agent voice toggle and gender (Puck / Kore) for Gemini Live
 - **Sandbox → production** — Test in the playground, then publish with conversation logs and usage tracking
 - **Billing** — Free tier for chat-only agents; Pro for voice, unlimited context, and production deployment (Stripe)
 
@@ -21,6 +23,7 @@ Multi-agent voice and chat platform. Build AI agents that speak and listen, grou
 | Auth | NextAuth v5 (Google OAuth) |
 | Database | Neon Postgres + Drizzle ORM + pgvector |
 | AI | Vercel AI SDK, Google Gemini (chat, voice, embeddings) |
+| Realtime | WebSocket voice via `next-ws` + Gemini Live ephemeral tokens |
 | Billing | Stripe |
 | Tooling | Bun, Biome, TypeScript |
 
@@ -41,6 +44,8 @@ Multi-agent voice and chat platform. Build AI agents that speak and listen, grou
    cd losono
    bun install
    ```
+
+   `bun install` runs the `prepare` script, which patches Next.js for WebSocket support (`next-ws patch`).
 
 2. **Configure environment**
 
@@ -110,40 +115,76 @@ Copy `.env.example` and set the following:
 ```
 src/
 ├── app/
-│   ├── (public)/          # Landing, sign-in, docs
-│   ├── (dashboard)/       # Authenticated dashboard
-│   ├── api/               # REST API routes
-│   └── embed/             # Public embed widget pages
+│   ├── (public)/              # Landing, sign-in, docs
+│   ├── (dashboard)/           # Authenticated dashboard
+│   │   └── agents/[id]/       # Prompt, context, playground, deploy
+│   ├── api/                   # REST + WebSocket API routes
+│   └── embed/[slug]/          # Public hosted embed widget
 ├── components/
-│   ├── chat/              # Chat UI
-│   ├── dashboard/         # Agent management UI
-│   ├── deploy/            # Publish, API keys, embed settings
-│   ├── landing/           # Marketing site
-│   └── voice/             # Voice playground client
+│   ├── chat/                  # Chat UI and markdown rendering
+│   ├── dashboard/             # Agent management, context, settings
+│   ├── deploy/                # Publish, API keys, embed settings, logs
+│   ├── embed/                 # Embed widget and loader helpers
+│   ├── landing/               # Marketing site
+│   └── voice/                 # Voice playground client
 ├── lib/
-│   ├── db/                # Drizzle schema and queries
-│   ├── rag/               # Ingestion, extraction, retrieval
-│   ├── gemini/            # Voice proxy and embeddings
-│   └── billing/           # Stripe subscriptions
-└── auth.ts                # NextAuth configuration
+│   ├── db/                    # Drizzle schema and queries
+│   ├── rag/                   # Ingestion, extraction, retrieval
+│   ├── gemini/                # Chat, voice, embeddings, ephemeral tokens
+│   ├── billing/               # Stripe subscriptions and limits
+│   └── widget-theme.ts        # Embed appearance resolution
+public/
+├── embed.js                   # One-line embed loader script
+└── audio-worklets/            # Voice capture and playback processors
 ```
 
 ## API and deployment
 
 Published agents can be integrated three ways:
 
-1. **REST chat** — `POST /api/agents/{agentId}/chat` with a Bearer API key; streams AI SDK UI messages
-2. **WebSocket voice** — `GET /api/agents/{agentId}/voice` (Pro + voice enabled)
-3. **Embed widget** — `<script src="{APP_URL}/embed.js" data-agent="your-slug"></script>`
+### Embed widget (recommended)
 
-See the in-app [API reference](http://localhost:3000/docs) at `/docs` for request formats and examples.
+Add a floating chat launcher with one script tag. Losono hosts the UI in a secure iframe — no API key is exposed on your site.
+
+```html
+<script src="{APP_URL}/embed.js" data-agent="your-slug"></script>
+```
+
+| Attribute | Required | Description |
+| --- | --- | --- |
+| `data-agent` | Yes | Published agent slug (from the deploy page) |
+| `data-position` | No | `bottom-right` (default) or `bottom-left` |
+| `src` | Yes | Must point at `{APP_URL}/embed.js` |
+
+Configure greeting, colors, logo, modes (chat or chat+voice), and allowed origins on the agent **Deploy** page. Voice in the embed requires Pro, voice enabled on the agent, and **Chat + voice** mode.
+
+### REST chat API
+
+`POST /api/agents/{agentId}/chat` with a Bearer API key; streams AI SDK UI messages.
+
+Use the agent **UUID** from the dashboard URL — not the embed slug.
+
+### WebSocket voice
+
+`GET /api/agents/{agentId}/voice?mode=deploy` (Pro + voice enabled)
+
+Production voice uses ephemeral Gemini Live tokens issued by the server. Playground mode (`mode=playground`) is available to authenticated owners in the dashboard.
+
+### Identifiers
+
+| Integration | Identifier |
+| --- | --- |
+| Embed widget | **slug** (`data-agent="my-agent"`) |
+| REST / voice API | **agentId** (UUID from dashboard URL) |
+
+See the in-app [API reference](http://localhost:3000/docs) at `/docs` for request formats, streaming protocol, and examples.
 
 ## Workflow
 
 1. Sign in with Google and create an agent
-2. Write a system prompt and upload context documents
+2. Write a system prompt, upload context documents, and configure voice settings
 3. Test chat and voice in the playground (sandbox mode)
-4. Publish, generate API keys, and embed on your site or integrate via REST
+4. Publish, customize embed appearance, generate API keys, and deploy on your site or integrate via REST
 
 ## License
 

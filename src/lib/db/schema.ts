@@ -114,8 +114,11 @@ export type AgentStatus = "draft" | "published";
 
 import type { WidgetTheme } from "@/lib/widget-theme";
 
+export type VoiceGender = "male" | "female";
+
 export type AgentSettings = {
   voicePersona?: string;
+  voiceGender?: VoiceGender;
   language?: string;
   temperature?: number;
   widgetTheme?: WidgetTheme;

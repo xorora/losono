@@ -122,6 +122,7 @@ export async function startVoiceProxySession(input: {
           model: getVoiceModelName(),
           systemInstruction,
           temperature: agent.settings.temperature,
+          voiceGender: agent.settings.voiceGender,
         }),
       ),
     );

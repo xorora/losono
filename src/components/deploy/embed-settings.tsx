@@ -43,6 +43,8 @@ const embedSettingsSchema = z.object({
   assistantBubbleColor: hexColor,
   sendButtonColor: hexColor,
   sendButtonIconColor: hexColor,
+  windowBorderColor: hexColor,
+  launcherBorderColor: hexColor,
   logoUrl: z.string(),
 });
 
@@ -80,6 +82,8 @@ function ColorField({
     | "assistantBubbleColor"
     | "sendButtonColor"
     | "sendButtonIconColor"
+    | "windowBorderColor"
+    | "launcherBorderColor"
   >;
 }) {
   return (
@@ -126,6 +130,8 @@ export function EmbedSettings({
       assistantBubbleColor: initialAppearance.assistantBubbleColor,
       sendButtonColor: initialAppearance.sendButtonColor,
       sendButtonIconColor: initialAppearance.sendButtonIconColor,
+      windowBorderColor: initialAppearance.windowBorderColor,
+      launcherBorderColor: initialAppearance.launcherBorderColor,
       logoUrl: initialAppearance.logoUrl,
     },
   });
@@ -156,6 +162,8 @@ export function EmbedSettings({
               assistantBubbleColor: values.assistantBubbleColor,
               sendButtonColor: values.sendButtonColor,
               sendButtonIconColor: values.sendButtonIconColor,
+              windowBorderColor: values.windowBorderColor,
+              launcherBorderColor: values.launcherBorderColor,
               logoUrl: values.logoUrl,
             },
           },
@@ -338,6 +346,20 @@ export function EmbedSettings({
               error={form.formState.errors.sendButtonIconColor}
               register={form.register}
               name="sendButtonIconColor"
+            />
+            <ColorField
+              id="window-border-color"
+              label="Widget window border color"
+              error={form.formState.errors.windowBorderColor}
+              register={form.register}
+              name="windowBorderColor"
+            />
+            <ColorField
+              id="launcher-border-color"
+              label="Widget button border color"
+              error={form.formState.errors.launcherBorderColor}
+              register={form.register}
+              name="launcherBorderColor"
             />
           </div>
 

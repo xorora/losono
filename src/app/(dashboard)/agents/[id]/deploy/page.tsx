@@ -96,6 +96,8 @@ async function DeployContent({ params }: DeployPageProps) {
           assistantBubbleColor: theme.assistantBubbleColor,
           sendButtonColor: theme.sendButtonColor,
           sendButtonIconColor: theme.sendButtonIconColor,
+          windowBorderColor: theme.windowBorderColor,
+          launcherBorderColor: theme.launcherBorderColor,
           logoUrl: theme.logoUrl,
         }}
       />
