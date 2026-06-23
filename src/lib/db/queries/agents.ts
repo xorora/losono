@@ -59,6 +59,16 @@ export async function listAgentsForUser(userId: string): Promise<Agent[]> {
     .orderBy(desc(agents.updatedAt));
 }
 
+export async function getAgentById(agentId: string): Promise<Agent | null> {
+  const [agent] = await getDb()
+    .select()
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  return agent ?? null;
+}
+
 export async function getAgentForUser(
   agentId: string,
   userId: string,

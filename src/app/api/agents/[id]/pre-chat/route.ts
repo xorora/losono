@@ -6,6 +6,7 @@ import {
   getFormSubmissionForVisitor,
   listFormSubmissionsForAgent,
 } from "@/lib/db/queries/form-submissions";
+import { syncNewSubmission } from "@/lib/integrations/sales-crm/sync";
 import {
   buildPreChatResponseSchema,
   isPreChatFormActive,
@@ -128,6 +129,10 @@ export async function POST(request: Request, { params }: RouteParams) {
   if (!submission) {
     return Response.json({ error: "submission_failed" }, { status: 500 });
   }
+
+  void syncNewSubmission(agentId, submission.id).catch((error) => {
+    console.error("Sales CRM sync hook failed:", error);
+  });
 
   return Response.json({
     submissionId: submission.id,

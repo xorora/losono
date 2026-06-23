@@ -29,6 +29,13 @@
       "when": 1782234368485,
       "tag": "0003_colossal_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782239882398,
+      "tag": "0004_condemned_makkari",
+      "breakpoints": true
     }
   ]
 }

@@ -62,4 +62,10 @@ export const env = {
     optional("FREE_CONTEXT_FILE_LIMIT", "3"),
     10,
   ),
+
+  // Sales CRM integration
+  SALES_CRM_URL: optional("SALES_CRM_URL"),
+  SALES_CRM_OAUTH_CLIENT_ID: optional("SALES_CRM_OAUTH_CLIENT_ID"),
+  SALES_CRM_OAUTH_CLIENT_SECRET: optional("SALES_CRM_OAUTH_CLIENT_SECRET"),
+  INTEGRATION_ENCRYPTION_KEY: optional("INTEGRATION_ENCRYPTION_KEY"),
 } as const;

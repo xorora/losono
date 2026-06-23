@@ -266,6 +266,109 @@ export const formSubmissions = pgTable(
   ],
 );
 
+// --- CRM integrations (Sales CRM) ---
+
+export type CrmProvider = "sales-crm";
+
+export type CrmFieldMapping = Record<string, string>;
+
+export type CrmExportStatus = "pending" | "success" | "failed" | "skipped";
+
+export const crmIntegrations = pgTable(
+  "crm_integrations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<CrmProvider>().notNull(),
+    salesCrmBaseUrl: text("sales_crm_base_url"),
+    accessTokenEncrypted: text("access_token_encrypted"),
+    refreshTokenEncrypted: text("refresh_token_encrypted"),
+    tokenExpiresAt: timestamp("token_expires_at", {
+      withTimezone: true,
+    }),
+    campaignId: text("campaign_id"),
+    campaignName: text("campaign_name"),
+    syncEnabled: boolean("sync_enabled").notNull().default(true),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("crm_integrations_user_provider_idx").on(
+      table.userId,
+      table.provider,
+    ),
+    index("crm_integrations_user_id_idx").on(table.userId),
+  ],
+);
+
+export const crmFieldMappings = pgTable(
+  "crm_field_mappings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    integrationId: uuid("integration_id")
+      .notNull()
+      .references(() => crmIntegrations.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    mapping: jsonb("mapping").$type<CrmFieldMapping>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("crm_field_mappings_integration_agent_idx").on(
+      table.integrationId,
+      table.agentId,
+    ),
+    index("crm_field_mappings_agent_id_idx").on(table.agentId),
+  ],
+);
+
+export const crmExportLog = pgTable(
+  "crm_export_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => formSubmissions.id, { onDelete: "cascade" }),
+    integrationId: uuid("integration_id")
+      .notNull()
+      .references(() => crmIntegrations.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    crmLeadId: text("crm_lead_id"),
+    status: text("status").$type<CrmExportStatus>().notNull(),
+    error: text("error"),
+    exportedAt: timestamp("exported_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("crm_export_log_submission_integration_idx").on(
+      table.submissionId,
+      table.integrationId,
+    ),
+    index("crm_export_log_integration_id_idx").on(table.integrationId),
+    index("crm_export_log_agent_id_idx").on(table.agentId),
+    index("crm_export_log_status_idx").on(table.status),
+  ],
+);
+
 // --- API keys ---
 
 export const apiKeys = pgTable(
@@ -324,6 +427,12 @@ export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type FormSubmission = typeof formSubmissions.$inferSelect;
 export type NewFormSubmission = typeof formSubmissions.$inferInsert;
+export type CrmIntegration = typeof crmIntegrations.$inferSelect;
+export type NewCrmIntegration = typeof crmIntegrations.$inferInsert;
+export type CrmFieldMappingRow = typeof crmFieldMappings.$inferSelect;
+export type NewCrmFieldMappingRow = typeof crmFieldMappings.$inferInsert;
+export type CrmExportLogEntry = typeof crmExportLog.$inferSelect;
+export type NewCrmExportLogEntry = typeof crmExportLog.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type UsageEvent = typeof usageEvents.$inferSelect;

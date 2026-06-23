@@ -3,12 +3,23 @@ import { Suspense } from "react";
 import { auth } from "@/auth";
 import { FormSubmissionsPanel } from "@/components/deploy/form-submissions-panel";
 import { PreChatFormSettings } from "@/components/deploy/pre-chat-form-settings";
+import { SalesCrmExportPanel } from "@/components/deploy/sales-crm-export-panel";
 import { getAgentForUser } from "@/lib/db/queries/agents";
+import {
+  getCrmIntegrationForUser,
+  getInitialSalesCrmBaseUrl,
+  isCrmIntegrationConnected,
+  serializeCrmIntegration,
+} from "@/lib/db/queries/crm-integrations";
 import { listFormSubmissionsForAgent } from "@/lib/db/queries/form-submissions";
+import { listSalesCrmCampaigns } from "@/lib/integrations/sales-crm/client";
+import { getDefaultSalesCrmBaseUrl } from "@/lib/integrations/sales-crm/config";
+import { isTokenEncryptionAvailable } from "@/lib/integrations/token-encryption";
 import { resolvePreChatForm } from "@/lib/pre-chat-form";
 
 type FormsPageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ crm?: string; crm_error?: string }>;
 };
 
 function FormsFallback() {
@@ -19,8 +30,53 @@ function FormsFallback() {
   );
 }
 
-async function FormsContent({ params }: FormsPageProps) {
+async function loadSalesCrmInitialState(userId: string) {
+  const platformReady = isTokenEncryptionAvailable();
+  const defaultSalesCrmUrl = getDefaultSalesCrmBaseUrl();
+  const integration = await getCrmIntegrationForUser(userId);
+  const connected = integration
+    ? isCrmIntegrationConnected(integration)
+    : false;
+
+  if (!integration || !connected) {
+    return {
+      platformReady,
+      defaultSalesCrmUrl,
+      connected: false,
+      integration: integration ? serializeCrmIntegration(integration) : null,
+      campaigns: [] as Awaited<ReturnType<typeof listSalesCrmCampaigns>>,
+      initialSalesCrmUrl: getInitialSalesCrmBaseUrl(integration),
+    };
+  }
+
+  try {
+    const campaigns = await listSalesCrmCampaigns(userId);
+
+    return {
+      platformReady,
+      defaultSalesCrmUrl,
+      connected: true,
+      integration: serializeCrmIntegration(integration),
+      campaigns,
+      initialSalesCrmUrl: getInitialSalesCrmBaseUrl(integration),
+    };
+  } catch (error) {
+    console.error("Failed to preload Sales CRM campaigns:", error);
+
+    return {
+      platformReady,
+      defaultSalesCrmUrl,
+      connected: true,
+      integration: serializeCrmIntegration(integration),
+      campaigns: [] as Awaited<ReturnType<typeof listSalesCrmCampaigns>>,
+      initialSalesCrmUrl: getInitialSalesCrmBaseUrl(integration),
+    };
+  }
+}
+
+async function FormsContent({ params, searchParams }: FormsPageProps) {
   const { id } = await params;
+  const { crm, crm_error: crmError } = await searchParams;
   const session = await auth();
   const userId = session?.user?.id;
 
@@ -33,9 +89,10 @@ async function FormsContent({ params }: FormsPageProps) {
     notFound();
   }
 
-  const [formSubmissions, preChatForm] = await Promise.all([
+  const [formSubmissions, preChatForm, salesCrmState] = await Promise.all([
     listFormSubmissionsForAgent(agent.id),
     Promise.resolve(resolvePreChatForm(agent.settings.preChatForm)),
+    loadSalesCrmInitialState(userId),
   ]);
 
   return (
@@ -50,6 +107,19 @@ async function FormsContent({ params }: FormsPageProps) {
 
       <PreChatFormSettings agentId={agent.id} initialConfig={preChatForm} />
 
+      <SalesCrmExportPanel
+        agentId={agent.id}
+        preChatFields={preChatForm.fields}
+        platformReady={salesCrmState.platformReady}
+        defaultSalesCrmUrl={salesCrmState.defaultSalesCrmUrl}
+        initialSalesCrmUrl={salesCrmState.initialSalesCrmUrl}
+        initialConnected={salesCrmState.connected}
+        initialIntegration={salesCrmState.integration}
+        initialCampaigns={salesCrmState.campaigns}
+        crmStatus={crm}
+        crmError={crmError}
+      />
+
       <FormSubmissionsPanel
         fields={preChatForm.fields}
         submissions={formSubmissions.map((submission) => ({
@@ -63,10 +133,10 @@ async function FormsContent({ params }: FormsPageProps) {
   );
 }
 
-export default function FormsPage({ params }: FormsPageProps) {
+export default function FormsPage({ params, searchParams }: FormsPageProps) {
   return (
     <Suspense fallback={<FormsFallback />}>
-      <FormsContent params={params} />
+      <FormsContent params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
