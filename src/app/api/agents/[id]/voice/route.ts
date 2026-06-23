@@ -3,6 +3,7 @@ import {
   resolveVoiceDeployedAccess,
   resolveVoicePlaygroundAccess,
 } from "@/lib/auth/deploy-access";
+import { assertPreChatComplete } from "@/lib/auth/pre-chat-access";
 import {
   getConversationForAgentUser,
   insertMessage,
@@ -136,11 +137,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const preChatResult = await assertPreChatComplete({
+      agent: result.agent,
+      visitorId: result.visitorId,
+    });
+    if (preChatResult instanceof Response) {
+      return preChatResult;
+    }
+
     const session = await createVoiceSession({
       agent: result.agent,
       agentId,
       visitorId: result.visitorId,
       mode: "voice",
+      visitorResponses: preChatResult?.responses,
     });
 
     return Response.json(session);

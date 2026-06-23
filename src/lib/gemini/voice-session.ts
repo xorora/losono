@@ -20,8 +20,9 @@ export async function createVoiceSession(input: {
   userId?: string;
   visitorId?: string;
   mode: "playground" | "voice";
+  visitorResponses?: Record<string, string>;
 }): Promise<VoiceSessionConfig> {
-  const { agent, agentId, userId, visitorId, mode } = input;
+  const { agent, agentId, userId, visitorId, mode, visitorResponses } = input;
 
   const ragQuery = agent.userPrompt.trim() || agent.name;
   let chunks: Awaited<ReturnType<typeof retrieveRelevantChunks>> = [];
@@ -36,6 +37,7 @@ export async function createVoiceSession(input: {
     agent,
     chunks,
     mode: "voice",
+    visitorResponses,
   });
   const preview = buildPromptPreview({
     userPrompt: agent.userPrompt,

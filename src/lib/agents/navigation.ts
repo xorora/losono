@@ -20,6 +20,11 @@ export const agentNavLinks = [
     segment: "playground",
   },
   {
+    href: (id: string) => `/agents/${id}/forms`,
+    label: "Forms",
+    segment: "forms",
+  },
+  {
     href: (id: string) => `/agents/${id}/deploy`,
     label: "Deploy",
     segment: "deploy",
@@ -41,6 +46,7 @@ export function getAgentSegmentFromPath(pathname: string): AgentNavSegment {
     segment === "prompt" ||
     segment === "context" ||
     segment === "playground" ||
+    segment === "forms" ||
     segment === "deploy"
   ) {
     return segment;

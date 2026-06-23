@@ -1,5 +1,9 @@
 import type { Agent } from "@/lib/db/schema";
 import { env } from "@/lib/env";
+import {
+  formatPreChatResponsesForPrompt,
+  resolvePreChatForm,
+} from "@/lib/pre-chat-form";
 import type { RetrievedChunk } from "@/lib/rag/retrieve";
 
 export type PromptMode = "chat" | "voice";
@@ -18,6 +22,7 @@ export function composeSystemPrompt(input: {
   agent: Agent;
   chunks: RetrievedChunk[];
   mode: PromptMode;
+  visitorResponses?: Record<string, string>;
 }): string {
   const parts: string[] = [];
 
@@ -29,6 +34,16 @@ export function composeSystemPrompt(input: {
   const userPrompt = input.agent.userPrompt.trim();
   if (userPrompt) {
     parts.push(`## Agent instructions\n${userPrompt}`);
+  }
+
+  if (input.visitorResponses) {
+    const visitorBlock = formatPreChatResponsesForPrompt({
+      config: resolvePreChatForm(input.agent.settings.preChatForm),
+      responses: input.visitorResponses,
+    });
+    if (visitorBlock) {
+      parts.push(visitorBlock);
+    }
   }
 
   if (input.chunks.length > 0) {

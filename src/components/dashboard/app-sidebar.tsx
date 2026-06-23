@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ClipboardList,
   FileText,
   FlaskConical,
   LayoutDashboard,
@@ -48,6 +49,7 @@ const agentLinkIcons = {
   prompt: FileText,
   context: Upload,
   playground: FlaskConical,
+  forms: ClipboardList,
   deploy: Rocket,
 } as const;
 

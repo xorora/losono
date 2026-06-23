@@ -5,6 +5,7 @@ import { EmbedWidget } from "@/components/embed/embed-widget";
 import { getSubscriptionByUserId } from "@/lib/billing/subscriptions";
 import { canUseVoiceInPlayground } from "@/lib/billing/voice-access";
 import { getPublishedAgentBySlug } from "@/lib/db/queries/agents";
+import { resolvePreChatForm } from "@/lib/pre-chat-form";
 import { resolveWidgetTheme } from "@/lib/widget-theme";
 
 type EmbedPageProps = {
@@ -39,12 +40,14 @@ async function EmbedContent({ params, searchParams }: EmbedPageProps) {
   const theme = resolveWidgetTheme(agent.settings.widgetTheme, {
     agentName: agent.name,
   });
+  const preChatForm = resolvePreChatForm(agent.settings.preChatForm);
 
   return (
     <EmbedWidget
       agentId={agent.id}
       agentName={agent.name}
       greeting={theme.greeting}
+      preChatForm={preChatForm}
       appearance={{
         backgroundColor: theme.backgroundColor,
         userFontColor: theme.userFontColor,

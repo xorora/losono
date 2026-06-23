@@ -9,6 +9,7 @@ import {
   resolveDeployedAccess,
   resolvePlaygroundAccess,
 } from "@/lib/auth/deploy-access";
+import { assertPreChatComplete } from "@/lib/auth/pre-chat-access";
 import { getMessageText } from "@/lib/chat/message-text";
 import {
   getOrCreateDeployedConversation,
@@ -85,6 +86,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     agent = access.agent;
   }
 
+  let visitorResponses: Record<string, string> | undefined;
+
+  if (mode === "chat") {
+    const preChatResult = await assertPreChatComplete({ agent, visitorId });
+    if (preChatResult instanceof Response) {
+      return preChatResult;
+    }
+    if (preChatResult) {
+      visitorResponses = preChatResult.responses;
+    }
+  }
+
   const lastUserMessage = [...messages]
     .reverse()
     .find((m) => m.role === "user");
@@ -131,6 +144,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     agent,
     chunks: retrievedChunks,
     mode: "chat",
+    visitorResponses,
   });
 
   const preview = buildPromptPreview({

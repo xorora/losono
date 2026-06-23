@@ -112,6 +112,7 @@ export const subscriptions = pgTable(
 
 export type AgentStatus = "draft" | "published";
 
+import type { PreChatFormConfig } from "@/lib/pre-chat-form";
 import type { WidgetTheme } from "@/lib/widget-theme";
 
 export type VoiceGender = "male" | "female";
@@ -123,6 +124,7 @@ export type AgentSettings = {
   temperature?: number;
   widgetTheme?: WidgetTheme;
   allowedOrigins?: string[];
+  preChatForm?: PreChatFormConfig;
 };
 
 export const agents = pgTable(
@@ -240,6 +242,30 @@ export const messages = pgTable(
   (table) => [index("messages_conversation_id_idx").on(table.conversationId)],
 );
 
+// --- Pre-chat form submissions ---
+
+export const formSubmissions = pgTable(
+  "form_submissions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    visitorId: text("visitor_id").notNull(),
+    responses: jsonb("responses").$type<Record<string, string>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("form_submissions_agent_id_idx").on(table.agentId),
+    uniqueIndex("form_submissions_agent_visitor_idx").on(
+      table.agentId,
+      table.visitorId,
+    ),
+  ],
+);
+
 // --- API keys ---
 
 export const apiKeys = pgTable(
@@ -296,6 +322,8 @@ export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+export type FormSubmission = typeof formSubmissions.$inferSelect;
+export type NewFormSubmission = typeof formSubmissions.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type UsageEvent = typeof usageEvents.$inferSelect;

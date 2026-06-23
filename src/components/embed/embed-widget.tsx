@@ -7,9 +7,16 @@ import { Loader2, Mic, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { PreChatForm } from "@/components/embed/pre-chat-form";
 import { WidgetLogo } from "@/components/embed/widget-logo";
 import { AgentVoice } from "@/components/voice/agent-voice";
 import { getMessageText } from "@/lib/chat/message-text";
+import {
+  getPreChatStorageKey,
+  isPreChatFormActive,
+  type PreChatFormConfig,
+  resolvePreChatForm,
+} from "@/lib/pre-chat-form";
 import { cn } from "@/lib/utils";
 import type { WidgetAppearance } from "@/lib/widget-theme";
 import { widgetThemeStyle } from "@/lib/widget-theme";
@@ -28,6 +35,7 @@ type EmbedWidgetProps = {
   greeting: string;
   appearance: WidgetAppearance;
   voiceEnabled: boolean;
+  preChatForm?: PreChatFormConfig;
   defaultOpen?: boolean;
   compact?: boolean;
   position?: "bottom-right" | "bottom-left";
@@ -90,13 +98,18 @@ export function EmbedWidget({
   greeting,
   appearance,
   voiceEnabled,
+  preChatForm,
   defaultOpen = false,
   compact = false,
   position = "bottom-right",
 }: EmbedWidgetProps) {
+  const resolvedPreChatForm = resolvePreChatForm(preChatForm);
+  const preChatRequired = isPreChatFormActive(resolvedPreChatForm);
   const [open, setOpen] = useState(defaultOpen);
   const [mode, setMode] = useState<"chat" | "voice">("chat");
   const [visitorId, setVisitorId] = useState("");
+  const [preChatComplete, setPreChatComplete] = useState(!preChatRequired);
+  const [preChatChecking, setPreChatChecking] = useState(preChatRequired);
   const anchorEdge = position === "bottom-left" ? "left-0" : "right-0";
   const form = useForm<EmbedChatValues>({
     resolver: zodResolver(embedChatSchema),
@@ -165,6 +178,70 @@ export function EmbedWidget({
 
     hydratedRef.current = true;
   }, [agentId, greeting, setMessages]);
+
+  useEffect(() => {
+    if (!preChatRequired || !visitorId) {
+      setPreChatChecking(false);
+      return;
+    }
+
+    const cachedSubmissionId = localStorage.getItem(
+      getPreChatStorageKey(agentId, visitorId),
+    );
+
+    if (!cachedSubmissionId) {
+      setPreChatComplete(false);
+      setPreChatChecking(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void fetch(
+      `/api/agents/${agentId}/pre-chat?visitorId=${encodeURIComponent(visitorId)}`,
+    )
+      .then((response) => response.json())
+      .then((data: { submitted?: boolean; submissionId?: string }) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (data.submitted && data.submissionId) {
+          localStorage.setItem(
+            getPreChatStorageKey(agentId, visitorId),
+            data.submissionId,
+          );
+          setPreChatComplete(true);
+        } else {
+          localStorage.removeItem(getPreChatStorageKey(agentId, visitorId));
+          setPreChatComplete(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPreChatComplete(Boolean(cachedSubmissionId));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPreChatChecking(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, preChatRequired, visitorId]);
+
+  function handlePreChatComplete(submissionId: string) {
+    if (visitorId) {
+      localStorage.setItem(
+        getPreChatStorageKey(agentId, visitorId),
+        submissionId,
+      );
+    }
+    setPreChatComplete(true);
+  }
 
   useEffect(() => {
     if (!hydratedRef.current || !visitorId) {
@@ -329,154 +406,173 @@ export function EmbedWidget({
         </div>
       </header>
 
-      {voiceEnabled && (
-        <div
-          className="flex shrink-0 gap-2 border-b border-(--widget-border) px-4 py-2"
-          style={{ backgroundColor: appearance.backgroundColor }}
-        >
-          <button
-            type="button"
-            className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-sm font-medium"
-            style={
-              mode === "chat"
-                ? {
-                    backgroundColor: appearance.userBubbleColor,
-                    color: appearance.userFontColor,
-                  }
-                : {
-                    backgroundColor: "transparent",
-                    color: appearance.assistantFontColor,
-                    border: "1px solid var(--widget-border)",
-                  }
-            }
-            onClick={() => setMode("chat")}
-          >
-            Chat
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-sm font-medium"
-            style={
-              mode === "voice"
-                ? {
-                    backgroundColor: appearance.userBubbleColor,
-                    color: appearance.userFontColor,
-                  }
-                : {
-                    backgroundColor: "transparent",
-                    color: appearance.assistantFontColor,
-                    border: "1px solid var(--widget-border)",
-                  }
-            }
-            onClick={() => setMode("voice")}
-          >
-            <Mic className="size-3.5" />
-            Voice
-          </button>
+      {preChatChecking ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
+          <Loader2
+            className="size-6 animate-spin"
+            style={{ color: "var(--widget-muted-text)" }}
+          />
         </div>
-      )}
-
-      {mode === "voice" ? (
-        <AgentVoice
+      ) : !preChatComplete ? (
+        <PreChatForm
           agentId={agentId}
-          agentName={agentName}
-          voiceAvailable={voiceEnabled}
-          mode="deploy"
           visitorId={visitorId}
-          embedded
+          config={resolvedPreChatForm}
           appearance={appearance}
+          onComplete={handlePreChatComplete}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
-            {messages.map((message) => {
-              const text = getMessageText(message);
-              if (!text) {
-                return null;
-              }
-
-              return (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
-                    message.role === "user" && "ml-auto",
-                  )}
-                  style={
-                    message.role === "user"
-                      ? {
-                          backgroundColor: appearance.userBubbleColor,
-                          color: appearance.userFontColor,
-                        }
-                      : {
-                          backgroundColor: appearance.assistantBubbleColor,
-                          color: appearance.assistantFontColor,
-                        }
-                  }
-                >
-                  {text}
-                </div>
-              );
-            })}
-
-            {isBusy && (
-              <div
-                className="flex items-center gap-2 text-sm"
-                style={{ color: "var(--widget-muted-text)" }}
+        <>
+          {voiceEnabled && (
+            <div
+              className="flex shrink-0 gap-2 border-b border-(--widget-border) px-4 py-2"
+              style={{ backgroundColor: appearance.backgroundColor }}
+            >
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-sm font-medium"
+                style={
+                  mode === "chat"
+                    ? {
+                        backgroundColor: appearance.userBubbleColor,
+                        color: appearance.userFontColor,
+                      }
+                    : {
+                        backgroundColor: "transparent",
+                        color: appearance.assistantFontColor,
+                        border: "1px solid var(--widget-border)",
+                      }
+                }
+                onClick={() => setMode("chat")}
               >
-                <Loader2 className="size-4 animate-spin" />
-                Thinking…
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {error && (
-            <div className="mx-4 mb-2 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error.message}
+                Chat
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-sm font-medium"
+                style={
+                  mode === "voice"
+                    ? {
+                        backgroundColor: appearance.userBubbleColor,
+                        color: appearance.userFontColor,
+                      }
+                    : {
+                        backgroundColor: "transparent",
+                        color: appearance.assistantFontColor,
+                        border: "1px solid var(--widget-border)",
+                      }
+                }
+                onClick={() => setMode("voice")}
+              >
+                <Mic className="size-3.5" />
+                Voice
+              </button>
             </div>
           )}
 
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex shrink-0 items-end gap-2 border-t border-(--widget-border) p-4"
-            style={{ backgroundColor: appearance.backgroundColor }}
-            noValidate
-          >
-            <textarea
-              placeholder="Type a message…"
-              rows={2}
-              className="min-h-11 flex-1 resize-none rounded-xl border border-(--widget-input-border) px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-(--widget-user-bubble)/30"
-              style={{
-                backgroundColor: appearance.backgroundColor,
-                color: appearance.assistantFontColor,
-              }}
-              aria-invalid={!!form.formState.errors.message}
-              {...form.register("message")}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
+          {mode === "voice" ? (
+            <AgentVoice
+              agentId={agentId}
+              agentName={agentName}
+              voiceAvailable={voiceEnabled}
+              mode="deploy"
+              visitorId={visitorId}
+              embedded
+              appearance={appearance}
             />
-            <button
-              type="submit"
-              disabled={isBusy || !message.trim()}
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg disabled:pointer-events-none disabled:opacity-50"
-              style={{
-                backgroundColor: appearance.sendButtonColor,
-                color: appearance.sendButtonIconColor,
-              }}
-            >
-              <Send
-                className="size-4"
-                style={{ color: appearance.sendButtonIconColor }}
-              />
-              <span className="sr-only">Send message</span>
-            </button>
-          </form>
-        </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+                {messages.map((message) => {
+                  const text = getMessageText(message);
+                  if (!text) {
+                    return null;
+                  }
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
+                        message.role === "user" && "ml-auto",
+                      )}
+                      style={
+                        message.role === "user"
+                          ? {
+                              backgroundColor: appearance.userBubbleColor,
+                              color: appearance.userFontColor,
+                            }
+                          : {
+                              backgroundColor: appearance.assistantBubbleColor,
+                              color: appearance.assistantFontColor,
+                            }
+                      }
+                    >
+                      {text}
+                    </div>
+                  );
+                })}
+
+                {isBusy && (
+                  <div
+                    className="flex items-center gap-2 text-sm"
+                    style={{ color: "var(--widget-muted-text)" }}
+                  >
+                    <Loader2 className="size-4 animate-spin" />
+                    Thinking…
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {error && (
+                <div className="mx-4 mb-2 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error.message}
+                </div>
+              )}
+
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="flex shrink-0 items-end gap-2 border-t border-(--widget-border) p-4"
+                style={{ backgroundColor: appearance.backgroundColor }}
+                noValidate
+              >
+                <textarea
+                  placeholder="Type a message…"
+                  rows={2}
+                  className="min-h-11 flex-1 resize-none rounded-xl border border-(--widget-input-border) px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-(--widget-user-bubble)/30"
+                  style={{
+                    backgroundColor: appearance.backgroundColor,
+                    color: appearance.assistantFontColor,
+                  }}
+                  aria-invalid={!!form.formState.errors.message}
+                  {...form.register("message")}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={isBusy || !message.trim()}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg disabled:pointer-events-none disabled:opacity-50"
+                  style={{
+                    backgroundColor: appearance.sendButtonColor,
+                    color: appearance.sendButtonIconColor,
+                  }}
+                >
+                  <Send
+                    className="size-4"
+                    style={{ color: appearance.sendButtonIconColor }}
+                  />
+                  <span className="sr-only">Send message</span>
+                </button>
+              </form>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { agentNavLinks } from "@/lib/agents/navigation";
+import { type AgentNavSegment, agentNavLinks } from "@/lib/agents/navigation";
 import { cn } from "@/lib/utils";
 
 type AgentNavProps = {
   agentId: string;
   agentName: string;
-  current: "settings" | "prompt" | "context" | "playground" | "deploy";
+  current: AgentNavSegment;
 };
 
 export function AgentNav({ agentId, agentName, current }: AgentNavProps) {

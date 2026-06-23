@@ -14,11 +14,11 @@ export function DashboardHeader({ totalAgents }: DashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60">
       <SidebarTrigger />
-      <Separator orientation="vertical" className="mr-1 h-4" />
+      <Separator orientation="vertical" className="mr-2" />
       <DashboardBreadcrumbs />
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto h-full flex items-center gap-3">
         <AgentSelector totalAgents={totalAgents} />
-        <Separator orientation="vertical" className="hidden h-4 sm:block" />
+        <Separator orientation="vertical" className="hidden sm:block mx-1" />
         <ModeToggle />
       </div>
     </header>

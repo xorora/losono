@@ -49,6 +49,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       ...agent.settings.widgetTheme,
       ...body.settings.widgetTheme,
     },
+    preChatForm: body.settings.preChatForm
+      ? {
+          ...agent.settings.preChatForm,
+          ...body.settings.preChatForm,
+          fields:
+            body.settings.preChatForm.fields ??
+            agent.settings.preChatForm?.fields ??
+            [],
+        }
+      : agent.settings.preChatForm,
   });
 
   if (!updated) {
